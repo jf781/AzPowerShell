@@ -241,6 +241,7 @@ Function Get-AzRBACPermissions {
                     }
                     Else {
                         Write-Verbose "Need to connect to Azure"
+                        Write-Host "Connecting to Azure.  Please check for a browser window asking for you to login" -ForegroundColor Yellow
                         Login-AzAccount
                     }
                 }
@@ -264,7 +265,14 @@ Function Get-AzRBACPermissions {
         }
 
         $Date = ((Get-Date).ToShortDateString()).Replace("/", "-")
-        Get-AzSubs | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOME/Desktop/Azure-RBAC-Output-$Date.csv
+        If ($env:HOME) {
+            Write-Verbose "Running on a non Windows.  Saving file to /users/%USERNAME%/Desktop"
+            Get-AzSubs | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOME/Desktop/Azure-RBAC-Output-$Date.csv
+        }
+        else {
+            Write-Verbose "Running a Windows PC. Saving file to C:\users\%USERNAME%\Desktop"
+            Get-AzSubs | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv
+        }
     }
 }
 
