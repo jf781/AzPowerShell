@@ -276,3 +276,4 @@ Function Get-AzRBACPermissions {
     }
 }
 
+Get-AzRBACPermissions
