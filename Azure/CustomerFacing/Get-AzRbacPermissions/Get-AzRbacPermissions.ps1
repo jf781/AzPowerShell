@@ -26,6 +26,8 @@ function Confirm-PSVersion {
                     Write-Verbose "PS Version is v5 but not 5.1 or newer"
                     $compatible = $false
                 }
+            }
+            Else {
                 Write-Verbose "PS Version is 4 or later"
                 $compatible = $false
             }
@@ -354,14 +356,16 @@ Write-Verbose "Ensuring the proper PowerShell Modules are installed"
 $installedModules = Confirm-ModulesInstalled -modules az.accounts, az.resources
 
 foreach ($installedModule in $installedModules) {
-    $moduleName = $installedModules.ModuleName
-    If ($installedModules.installed) {
+    $moduleName = $installedModule.ModuleName
+    If ($installedModule.installed) {
         Write-Verbose "$moduleName is installed"
     }
     Else {
         Write-Verbose "$moduleName is not installed"
         Write-Host "The PowerShell Module is not installed.  Please run the command below to install the module" -ForegroundColor Yellow
-        Write-Host "Install-Module -Name $moduleName -Repository PSGallery" -ForegroundColor Green
+        Write-Host ""
+        Write-Host "     Install-Module -Name $moduleName -Repository PSGallery" -ForegroundColor Green
+        Write-Host ""
     }
 }
 
@@ -370,7 +374,8 @@ If ($installedModules.installed -contains $true) {
 }
 Else {
     Write-Verbose "There are PowerShell modules that need to be installed"
-    Write-Host "Existing script.  Please run the necessary commands listed in green above to install the needed modules" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Existing script.  Please run the necessary commands listed in GREEN above to install the needed modules" -ForegroundColor Yellow
     exit
 }
 
@@ -384,3 +389,4 @@ else {
     Get-AzSubsFromTenant | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv
 }
 
+ 
