@@ -5,6 +5,83 @@
 #   It will save the output to a CSV file on your desktop
 #
 
+function Confirm-PSVersion {
+    [CmdLetBinding()]
+    param (
+    )
+    PROCESS {
+        Write-Verbose "Testing to see if PowerShell v5.1 or later is installed"
+        try { 
+            Write-Verbose "Testing to see if PowerShell v5.1 or later is installed"
+            If ($PSVersionTable.PSVersion.Major -ge "6") {
+                Write-Verbose "PSVersion is 6 or newer"
+                $compatible = $true
+            }
+            ElseIf ($PSVersionTable.PSVersion.Major -eq "5") {
+                If ($PSVersionTable.PSVersion.Minor -ge "1") {
+                    Write-Verbose "PS Verion is 5.1 or newer"
+                    $compatible = $true
+                }
+                Else {
+                    Write-Verbose "PS Version is v5 but not 5.1 or newer"
+                    $compatible = $false
+                }
+                Write-Verbose "PS Version is 4 or later"
+                $compatible = $false
+            }
+        }
+        catch {
+            Write-Verbose "In Catch block.  Error occurred determining PS Version"
+            Write-Host "Error determining PowerShell version" -ForegroundColor Red
+            Write-Host "Error Msg: $_" -ForegroundColor Red
+            break
+        }
+        return $compatible
+    }   
+}
+
+function Confirm-ModulesInstalled {
+    [CmdLetBinding()]
+    param (
+        [Parameter(
+            Mandatory = $false,
+            ValueFromPipeline = $true
+        )]
+        [string[]]
+        $modules
+    )
+    PROCESS {
+        Write-Verbose "Testing if Modules are installed"
+        $results = @()
+        foreach ($module in $modules) {
+            try {
+                Write-Verbose "Testing for module $module"
+                if (Get-Module -Name $module) {
+                    Write-Verbose "Module $module is installed"
+                    $moduleTests = [PSCustomObject]@{
+                        ModuleName = $module
+                        Installed  = $true
+                    }
+                }
+                Else {
+                    Write-Verbose "Module $module is NOT installed"
+                    $moduleTests = [PSCustomObject]@{ 
+                        ModuleName = $module
+                        Installed  = $false
+                    }
+                }
+                $results += $moduleTests
+                
+            }
+            catch {
+                Write-Verbose "Error checking for $module"
+                Write-Host "Error checking for module - $module" -ForegroundColor Red
+                Write-Host "Error Msg: $_" -ForegroundColor Red
+            }
+        }            
+        return $results
+    }
+}
 
 Function Export-RBACRoles { 
     [CmdletBinding()]
@@ -257,6 +334,44 @@ Function Get-AzSubsFromTenant {
         }
         return $tenantAzSubs
     }
+}
+
+ 
+Write-Verbose "Ensure PowerShell 5.1 or later is installed"
+If (Confirm-PSVersion) {
+    Write-Verbose "PowerShell 5.1 or later is installed"
+}
+Else {
+    Write-Verbose "A later version of PowerShell is installed"
+    Write-Host "The version of PowerShell is older then what is supported.  Please updated to a version 5.1 or newer of PowerShell" -ForegroundColor Yellow
+    Write-Host "Please visit the site below for details on the current version of PowerShell (As of December 2019)" -ForegroundColor Yellow
+    Write-Host "https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell?view=powershell-6" -ForegroundColor Green
+    Write-Host "Script is exiting" -ForegroundColor Yellow
+    Exit
+}
+
+Write-Verbose "Ensuring the proper PowerShell Modules are installed"
+$installedModules = Confirm-ModulesInstalled -modules az.accounts, az.resources
+
+foreach ($installedModule in $installedModules) {
+    $moduleName = $installedModules.ModuleName
+    If ($installedModules.installed) {
+        Write-Verbose "$moduleName is installed"
+    }
+    Else {
+        Write-Verbose "$moduleName is not installed"
+        Write-Host "The PowerShell Module is not installed.  Please run the command below to install the module" -ForegroundColor Yellow
+        Write-Host "Install-Module -Name $moduleName -Repository PSGallery" -ForegroundColor Green
+    }
+}
+
+If ($installedModules.installed -contains $true) {
+    Write-Verbose "Needed modules are installed.  Proceeding with script"
+}
+Else {
+    Write-Verbose "There are PowerShell modules that need to be installed"
+    Write-Host "Existing script.  Please run the necessary commands listed in green above to install the needed modules" -ForegroundColor Yellow
+    exit
 }
 
 $Date = ((Get-Date).ToShortDateString()).Replace("/", "-")
