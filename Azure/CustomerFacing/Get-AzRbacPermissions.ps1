@@ -227,8 +227,7 @@ Function Get-AzRBACPermissions {
             }
         }
 
-        Function Get-AzSubs {
-            [CmdletBinding()]
+        Function Get-AzSubsFromTenant {
             [CmdletBinding()]
             param (
             )
@@ -256,22 +255,23 @@ Function Get-AzRBACPermissions {
                 $azSubs = Get-AzSubscription
 
                 foreach ($azSub in $azSubs) {
+                    Write-Verbose "Getting information about $azSub"
                     $SubRBAC = Get-AzSubPermissions -subscriptionID $azSub.Id -tenantID $azSub.TenantId -azSubName $azSub.Name
-                    $AccountRBAC += $SubRBAC
+                    $tenantAzSubs += $SubRBAC
                 }
 
-                return $AccountRBAC
+                return $tenantAzSubs
             }
         }
 
         $Date = ((Get-Date).ToShortDateString()).Replace("/", "-")
         If ($env:HOME) {
             Write-Verbose "Running on a non Windows.  Saving file to /users/%USERNAME%/Desktop"
-            Get-AzSubs | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOME/Desktop/Azure-RBAC-Output-$Date.csv
+            Get-AzSubsFromTenant | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOME/Desktop/Azure-RBAC-Output-$Date.csv
         }
         else {
             Write-Verbose "Running a Windows PC. Saving file to C:\users\%USERNAME%\Desktop"
-            Get-AzSubs | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv
+            Get-AzSubsFromTenant | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv
         }
     }
 }
