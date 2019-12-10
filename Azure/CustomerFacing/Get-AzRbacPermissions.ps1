@@ -95,24 +95,24 @@ Function Get-AzRBACPermissions {
                     Write-Verbose "Failed to connect to subscription with SudID = $subscriptionID, TenantID = $tenantID"
                     Write-Host "Unable to Connect to SubscriptionID $subscriptionID" -ForegroundColor red 
                     Write-Host "Error Msg: $_" -ForegroundColor Red
-                    exit
+                    break
                 }
 
                 Write-Verbose "Getting the resource groups from $azSubName" 
                 $resGroups = Get-AzResourceGroup
+            
+                Write-Host "Getting RBAC roles for subscription - $azSubName" -ForegroundColor Green
+                Write-Verbose "Running through each resource group to check permissions"
+            
+                Foreach ($resGroup in $resGroups) {
 
-                try {
-            
-                    Write-Host "Getting RBAC roles for subscription - $azSubName" -ForegroundColor Green
-                    Write-Verbose "Running through each resource group to check permissions"
-            
-                    Foreach ($resGroup in $resGroups) {
+                    try {
 
                         Write-Verbose "Getting RBAC Roles assigned to ResourceGroup - $resGroup.ResourceGroupName"
                         $resGroupRoles = Get-AzRoleAssignment -ResourceGroupName $resGroup.ResourceGroupName -ErrorAction Stop
 
                         foreach ($role in $resGroupRoles) {
-                   
+                    
                             #Defining variables to test role scope
                             $roleScope = $role.Scope
                             $roleName = $role.name
@@ -139,12 +139,12 @@ Function Get-AzRBACPermissions {
                             }
                         }
                     }
-                }
-                Catch { 
+                    Catch { 
 
-                    Write-Verbose "Error occurred obtaining role assigned to resource group $resGroup"
-                    Write-Host "Error getting roles from the resouce group - $resGroup" -ForegroundColor Red
-                    Write-Host "Error Msg: $_" -ForegroundColor Red
+                        Write-Verbose "Error occurred obtaining role assigned to resource group $resGroup"
+                        Write-Host "Error getting roles from the resouce group - $resGroup" -ForegroundColor Red
+                        Write-Host "Error Msg: $_" -ForegroundColor Red
+                    }
                 }
         
                 try {
@@ -218,7 +218,6 @@ Function Get-AzRBACPermissions {
                 Catch {
 
                     Write-Verbose "Error obtaining roles for Subscription assignement"
-                    Write-Verbose "Error Msg: $_"
                     Write-Host "Error logging roles for Management assignments" -ForegroundColor Red
                     Write-Host "Error Msg: $_" -ForegroundColor Red
                 }
@@ -241,14 +240,14 @@ Function Get-AzRBACPermissions {
                     Else {
                         Write-Verbose "Need to connect to Azure"
                         Write-Host "Connecting to Azure.  Please check for a browser window asking for you to login" -ForegroundColor Yellow
-                        Login-AzAccount
+                        Login-AzAccount -ErrorAction Stop
                     }
                 }
                 catch {
                     Write-Verbose "Error validating connect to Azure."
                     Write-Host "Error confirming connecting to Azure"
                     Write-Verbose "Error Msg: $_"
-            
+                    break
                 }
 
                 Write-Verbose "Getting list of Azure Subscriptions"
