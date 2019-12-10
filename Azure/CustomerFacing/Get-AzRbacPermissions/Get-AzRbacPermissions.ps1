@@ -58,6 +58,7 @@ function Confirm-ModulesInstalled {
         foreach ($module in $modules) {
             try {
                 Write-Verbose "Testing for module $module"
+                Import-Module -Name $module -ErrorAction SilentlyContinue
                 if (Get-Module -Name $module) {
                     Write-Verbose "Module $module is installed"
                     $moduleTests = [PSCustomObject]@{
@@ -362,21 +363,21 @@ foreach ($installedModule in $installedModules) {
     }
     Else {
         Write-Verbose "$moduleName is not installed"
-        Write-Host "The PowerShell Module is not installed.  Please run the command below to install the module" -ForegroundColor Yellow
+        Write-Host "The PowerShell Module: $moduleName is not installed.  Please run the command below to install the module" -ForegroundColor Yellow
         Write-Host ""
         Write-Host "     Install-Module -Name $moduleName -Repository PSGallery" -ForegroundColor Green
         Write-Host ""
     }
 }
 
-If ($installedModules.installed -contains $true) {
-    Write-Verbose "Needed modules are installed.  Proceeding with script"
-}
-Else {
+If ($installedModules.installed -contains $false) {
     Write-Verbose "There are PowerShell modules that need to be installed"
     Write-Host ""
     Write-Host "Existing script.  Please run the necessary commands listed in GREEN above to install the needed modules" -ForegroundColor Yellow
     exit
+}
+Else {
+    Write-Verbose "Needed modules are installed.  Proceeding with script"
 }
 
 $Date = ((Get-Date).ToShortDateString()).Replace("/", "-")
