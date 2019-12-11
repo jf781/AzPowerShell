@@ -1,13 +1,4 @@
 function Confirm-ModulesInstalled {
-    [CmdLetBinding()]
-    param (
-        [Parameter(
-            Mandatory = $true,
-            ValueFromPipeline = $true
-        )]
-        [string[]]
-        $modules
-    )
     <#
     .SYNOPSIS
         This script will check to see if the modules supplied via the $modules parameter are installed on the system.  It will provide an out of all modules and if they are installed.  
@@ -37,6 +28,15 @@ function Confirm-ModulesInstalled {
         az.accounts       True
         az.resources     False
     #>
+    [CmdLetBinding()]
+    param (
+        [Parameter(
+            Mandatory = $true,
+            ValueFromPipeline = $true
+        )]
+        [string[]]
+        $modules
+    )
     PROCESS {
         Write-Verbose "Testing if Modules are installed"
         $results = @()

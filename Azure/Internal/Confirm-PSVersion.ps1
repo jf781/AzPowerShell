@@ -1,4 +1,28 @@
 function Confirm-PSVersion {
+    <#
+    .SYNOPSIS
+        This script will check to see if the running version of PowerShell is 5.1 or newer.   
+    .DESCRIPTION
+        This script does not install or make any changes.  It only checks to see if the version of PowerShell is 5.1 or newer 
+    .INPUTS
+        None
+    .OUTPUTS
+        It will output a boolean value.    If the version of PowerShell is 5.1 or newer, the value will be 'True'.  
+        If it is not, then the value will be 'False'.  
+    
+    .NOTES
+        Version:        1.0
+        Author:         Joe Fecht - AHEAD, llc.
+        Creation Date:  December 2019
+        Purpose/Change: Initial deployment
+    
+    .EXAMPLE
+        Confirm-PSVersion
+
+        If the running version of PowerShell is 5.1 or newer the result will be below.  
+
+        True
+    #>
     [CmdLetBinding()]
     param (
     )
