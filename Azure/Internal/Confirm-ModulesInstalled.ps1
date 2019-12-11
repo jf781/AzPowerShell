@@ -14,7 +14,7 @@ function Confirm-ModulesInstalled {
         foreach ($module in $modules) {
             try {
                 Write-Verbose "Testing for module $module"
-                Import-Module -Name $module
+                Import-Module -Name $module -ErrorAction SilentlyContinue
                 if (Get-Module -Name $module) {
                     Write-Verbose "Module $module is installed"
                     $moduleTests = [PSCustomObject]@{
