@@ -1,11 +1,7 @@
 
 
-Describe 'PowerShell Verion' { 
-    it 'Is PowerShell v5.1 or later installed?' { 
-
-        Mock $compatible -eq $false
-
-        $compatible = $null
+Describe 'PowerShell Version and modules' { 
+    it 'PowerShell v5.1 or later is installed' { 
         If ($PSVersionTable.PSVersion.Major -ge "6") {
             Write-Verbose "PSVersion is 6 or newer"
             $compatible = $true
@@ -22,8 +18,15 @@ Describe 'PowerShell Verion' {
             Write-Verbose "PS Version is 4 or later"
             $compatible = $false
         }
+        $compatible | Should -BeTrue
+    }
 
-        $compatible | Should be $true
+    $modules = @{module = "Az.Accounts" }, @{module = "Az.Resources" }
+    
+    it 'The module <module> is installed' -TestCases $modules { 
+        param($module)
+
+        Get-Module -Name $module | Should -not -BeNullOrEmpty
     }
 }
 
