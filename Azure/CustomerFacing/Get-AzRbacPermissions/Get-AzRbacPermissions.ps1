@@ -434,6 +434,6 @@ function Get-AzRbacPermissions {
     else {
         Write-Verbose "Running a Windows PC. Saving file to C:\users\%USERNAME%\Desktop"
         $tenantRBAC | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv
-        Write-Host "Finished exporting RBAC Role Assingments. Export is saved to $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv "
+        Write-Host "Finished exporting RBAC Role Assingments. Export is saved to $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv " -ForegroundColor Green
     }
 }
