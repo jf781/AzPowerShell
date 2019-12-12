@@ -24,6 +24,10 @@ Describe 'Test-Export-RBACRoles' {
     }
 
     it 'Confirm Role Export contains 7 items' {
-        (Export-RBACRoles -role $role -roleScope $roleScope -azSubName $azSubName | GM -MemberType NoteProperty).Count | Should -BeGreaterOrEqual 7
+        (Export-RBACRoles -role $role -roleScope $roleScope -azSubName $azSubName | Get-Member -MemberType NoteProperty).Count | Should -BeGreaterOrEqual 7
     }
+}
+
+Describe 'Test-Get-AzSubPermissions' { 
+    
 }

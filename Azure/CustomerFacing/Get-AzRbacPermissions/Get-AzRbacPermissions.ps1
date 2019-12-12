@@ -117,7 +117,7 @@ Function Export-RBACRoles {
         $roleDefinitionId = $role.RoleDefinitionId
         $roleObjectType = $role.objectType
 
-        $props = [ordered]@{
+        $roleProps = [ordered]@{
             Subscription    = $azSubName
             Scope           = $roleScope
             AssignedTo      = $roleDisplayName
@@ -127,7 +127,7 @@ Function Export-RBACRoles {
             RoleID          = $roleDefinitionId
         }
 
-        New-Object -TypeName psobject -Property $props
+        New-Object -TypeName psobject -Property $roleProps
     }
 }
 
@@ -317,25 +317,33 @@ Function Get-AzSubsFromTenant {
             Else {
                 Write-Verbose "Need to connect to Azure"
                 Write-Host "Connecting to Azure.  Please check for a browser window asking for you to login" -ForegroundColor Yellow
-                Login-AzAccount
+                Login-AzAccount -ErrorAction Stop
             }
         }
         catch {
             Write-Verbose "Error validating connect to Azure."
-            Write-Host "Error confirming connecting to Azure"
-            Write-Verbose "Error Msg: $_"
-    
+            Write-Host "Error confirming connecting to Azure" -ForegroundColor Red
+            Write-Host "Error Msg: $_" -ForegroundColor Red
+            break
         }
 
         Write-Verbose "Getting list of Azure Subscriptions"
         $azSubs = Get-AzSubscription
+        $tenantProps = @()
 
         foreach ($azSub in $azSubs) {
             Write-Verbose "Getting information about $Azsub"
-            $SubRBAC = Get-AzSubPermissions -subscriptionID $azSub.Id -tenantID $azSub.TenantId -azSubName $azSub.Name
-            $tenantAzSubs += $SubRBAC
+            $subName = $azSub.Name
+            $subId = $azSub.Id
+            $subTenantId = $azSub.TenantID
+            $subProps = [pscustomobject]@{
+                subName = $subName
+                subID   = $subId
+                SubTenantId = $subTenantId
+             }
+            $tenantProps += $subProps
         }
-        return $tenantAzSubs
+        return $tenantProps
     }
 }
 
@@ -381,13 +389,22 @@ Else {
 }
 
 $Date = ((Get-Date).ToShortDateString()).Replace("/", "-")
+$tenantRBAC = @()
+
+Write-Verbose "Getting subs associated with Tenant"
+$tenantSubs = Get-AzSubsFromTenant
+
+Write-verbose "Getting RBAC permissions for each subscription"
+foreach ($tenantSub in $tenantSubs) {
+    $tenantSubRBAC = Get-AzSubPermissions -subscriptionID $tenantSub.SubID -tenantID $tenantSub.SubTenantId -azSubName $tenantSub.subName
+    $tenantRBAC += $tenantSubRBAC
+}
+
 If ($env:HOME) {
     Write-Verbose "Running on a non Windows.  Saving file to /users/%USERNAME%/Desktop"
-    Get-AzSubsFromTenant | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOME/Desktop/Azure-RBAC-Output-$Date.csv
+    $tenantRBAC | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOME/Desktop/Azure-RBAC-Output-$Date.csv
 }
 else {
     Write-Verbose "Running a Windows PC. Saving file to C:\users\%USERNAME%\Desktop"
-    Get-AzSubsFromTenant | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv
+    $tenantRBAC | ConvertTo-Csv -NoTypeInformation | Out-File $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv
 }
-
- 
