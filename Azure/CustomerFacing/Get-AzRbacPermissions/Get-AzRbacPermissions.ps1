@@ -321,8 +321,8 @@ Function Get-AzSubsFromTenant {
             }
         }
         catch {
-            Write-Verbose "Error validating connect to Azure."
-            Write-Host "Error confirming connecting to Azure" -ForegroundColor Red
+            Write-Verbose "Error validating connection to Azure."
+            Write-Host "Error validating connection to Azure" -ForegroundColor Red
             Write-Host "Error Msg: $_" -ForegroundColor Red
             break
         }
@@ -334,12 +334,12 @@ Function Get-AzSubsFromTenant {
         foreach ($azSub in $azSubs) {
             Write-Verbose "Getting information about $Azsub"
             $subName = $azSub.Name
-            $subId = $azSub.Id
+            $subId = $azSub.SubscriptionID
             $subTenantId = $azSub.TenantID
             $subProps = [pscustomobject]@{
                 subName = $subName
                 subID   = $subId
-                SubTenantId = $subTenantId
+                subTenantId = $subTenantId
              }
             $tenantProps += $subProps
         }
@@ -396,7 +396,7 @@ $tenantSubs = Get-AzSubsFromTenant
 
 Write-verbose "Getting RBAC permissions for each subscription"
 foreach ($tenantSub in $tenantSubs) {
-    $tenantSubRBAC = Get-AzSubPermissions -subscriptionID $tenantSub.SubID -tenantID $tenantSub.SubTenantId -azSubName $tenantSub.subName
+    $tenantSubRBAC = Get-AzSubPermissions -subscriptionID $tenantSub.subID -tenantID $tenantSub.SubTenantId -azSubName $tenantSub.subName
     $tenantRBAC += $tenantSubRBAC
 }
 
