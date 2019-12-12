@@ -437,3 +437,5 @@ function Get-AzRbacPermissions {
         Write-Host "Finished exporting RBAC Role Assingments. Export is saved to $env:HOMEPATH\Desktop\Azure-RBAC-Output-$Date.csv " -ForegroundColor Green
     }
 }
+
+Get-AzRbacPermissions
