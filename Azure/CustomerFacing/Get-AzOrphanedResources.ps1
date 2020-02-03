@@ -7,8 +7,10 @@ function Get-AzOrphanedResources {
         This script does not install or make any changes.   It does have the following requirements that if not met, will stop the script from running
         - Running in PowerShell 5.1 or newer context
         - The following modules need to be installed
-            - Az.Resources
             - Az.Accounts 
+            - Az.Compute
+            - Az.Network
+            - Az.Storage
             - ImportExcel
         
     .INPUTS
@@ -440,7 +442,8 @@ function Get-AzOrphanedResources {
         
         #Validate necessary modules are installed
         Write-Verbose "Ensuring the proper PowerShell Modules are installed"
-        $installedModules = Confirm-ModulesInstalled -modules az.accounts, az.resources, ImportExcel
+        $installedModules = Confirm-ModulesInstalled -modules az.accounts, az.compute, az.network, az.storage, ImportExcel
+        $modulesNeeded = $False
 
         foreach ($installedModule in $installedModules) {
             $moduleName = $installedModule.ModuleName
@@ -453,7 +456,13 @@ function Get-AzOrphanedResources {
                 Write-Host ""
                 Write-Host "     Install-Module -Name $moduleName -Repository PSGallery" -ForegroundColor Green
                 Write-Host ""
+                $modulesNeeded = $true
             }
+        }
+
+        If ($modulesNeeded) {
+            Write-Host "Please install the modules listed above and then run the script again" -ForegroundColor Yellow
+            Exit
         }
 
         # Defining all variables
