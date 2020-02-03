@@ -1,48 +1,42 @@
-<#
-## This sections is for the core scriptes
-
-#Get Orphaned NSGs
-Get-AzNetworkSecurityGroup | Where-Object { ($_.NetworkInterfaces.Count -eq 0) -and ($_.subnets.Count -eq 0) }
-
-#Get Orphaned Public IPs
-Get-AzPublicIpAddress | Where-Object { $_.IpConfiguration -eq $null }
-
-#Get Orphanic NetworkInterfaces
-Get-AzNetworkInterface | Where-Object { ($_.PrivateEndpoint -eq $null) -and ($_.VirtualMachine -eq $null) }
-
-#Get Orphaned Managed Disks
-get-azdisk | Where-Object { $_.ManagedBy -eq $null }
-
-https://docs.microsoft.com/en-us/azure/templates/microsoft.compute/2019-07-01/disks#CreationData
-
-
-#Get Unmanaged disks
-https://docs.microsoft.com/en-us/azure/virtual-machines/windows/find-unattached-disks
-
-
-$storageAccounts = Get-AzStorageAccount
-foreach ($storageAccount in $storageAccounts) {
-    $storageKey = (Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction silentlycontinue)[0].Value
-    $context = New-AzStorageContext -StorageAccountName $storageAccount.StorageAccountName -StorageAccountKey $storageKey
-    $containers = Get-AzStorageContainer -Context $context -ErrorAction SilentlyContinue
-    foreach ($container in $containers) {
-        $blobs = Get-AzStorageBlob -Container $container.Name -Context $context
-        #Fetch all the Page blobs with extension .vhd as only Page blobs can be attached as disk to Azure VMs
-        $blobs | Where-Object { $_.BlobType -eq 'PageBlob' -and $_.Name.EndsWith('.vhd') } | ForEach-Object {
-            $_.ICloudBlob.Uri.absoluteUri
-        }
-    }
-}
-
-#>
-
 
 function Get-AzOrphanedResources {
+    <#
+    .SYNOPSIS
+        This script is designed to export a list of orphaned Azure resources. 
+    .DESCRIPTION
+        This script does not install or make any changes.   It does have the following requirements that if not met, will stop the script from running
+        - Running in PowerShell 5.1 or newer context
+        - The following modules need to be installed
+            - Az.Resources
+            - Az.Accounts 
+            - ImportExcel
+        
+    .INPUTS
+        No input is needed to run the script.  If you are not connected to Azure it will prompt you to login. 
+    .OUTPUTS
+        It will output an Excel file on the current user's desktop that has a tab for the following orphaned resources.  (Excel does not need to be installed on the workstation running the file)
+        - Network Security Groups
+        - Public IP addresses
+        - NICs
+        - Managed Disks
+        - Unmanaged Disks
+    .NOTES
+        Version:        1.0
+        Author:         Joe Fecht - AHEAD, llc.
+        Creation Date:  February 2020
+        Purpose/Change: Initial deployment
+    
+    .EXAMPLE
+        Get-AzOrphanedResources
+    #>
     [CmdletBinding()]
     param (
         
     )
     process {
+        #----------------------------------------------------------------------------------------
+        # Confirm PS Version and Az module is installed
+        #----------------------------------------------------------------------------------------
         function Confirm-PSVersion {
             [CmdLetBinding()]
             param (
@@ -124,31 +118,9 @@ function Get-AzOrphanedResources {
             }
         }
 
-        function Set-AlternatingCSSClasses {
-            [CmdletBinding()]
-            param(
-                [Parameter(Mandatory = $True, ValueFromPipeline = $True)][string]$HTMLFragment,
-                [Parameter(Mandatory = $True)][string]$CSSEvenClass,
-                [Parameter(Mandatory = $True)][string]$CssOddClass
-            )
-
-            [xml]$xml = $HTMLFragment
-            $table = $xml.SelectSingleNode('table')
-            $classname = $CSSOddClass
-            foreach ($tr in $table.tr) {
-                if ($classname -eq $CSSEvenClass) {
-                    $classname = $CssOddClass
-                }
-                else {
-                    $classname = $CSSEvenClass
-                }
-                $class = $xml.CreateAttribute('class')
-                $class.value = $classname
-                $tr.attributes.append($class) | Out-null
-            }
-            $xml.innerxml | out-string
-        }
-
+        #----------------------------------------------------------------------------------------
+        # Module to check for Orphaned NSGs
+        #----------------------------------------------------------------------------------------
         function Get-AzOrphangedNetworkSecurityGroups {
             [CmdLetBinding()]
             param ()
@@ -157,11 +129,11 @@ function Get-AzOrphanedResources {
                 $orphanedNSGs = Get-AzNetworkSecurityGroup | Where-Object { ($_.NetworkInterfaces.Count -eq 0) -and ($_.subnets.Count -eq 0) }
                 
                 foreach ($orphanedNSG in $orphanedNSGs) {
-                    $nsgNname       = $orphanedNSG.Name
-                    $nsgRgName      = $orphanedNSG.ResourceGroupName
-                    $nsgLocation    = $orphanedNSG.Location
-                    $nsgId          = $orphanedNSG.id
-                    $nsgRuleCount   = $orphanedNSG.SecurityRules.Count
+                    $nsgNname = $orphanedNSG.Name
+                    $nsgRgName = $orphanedNSG.ResourceGroupName
+                    $nsgLocation = $orphanedNSG.Location
+                    $nsgId = $orphanedNSG.id
+                    $nsgRuleCount = $orphanedNSG.SecurityRules.Count
                     #$nsgTags        = $orphanedNSG.TagsTable
 
                     $nsgProps = [ordered]@{
@@ -179,6 +151,9 @@ function Get-AzOrphanedResources {
             }
         }
 
+        #----------------------------------------------------------------------------------------
+        # Module to check for Orphaned Public IPs
+        #----------------------------------------------------------------------------------------
         function Get-AzOrphanedPublicIps {
             [CmdletBinding()]
             param ()
@@ -188,12 +163,12 @@ function Get-AzOrphanedResources {
 
                 foreach ($orphanedPIP in $orphanedPIPs) {
 
-                    $pipName                = $orphanedPIP.Name
-                    $pipRgName              = $orphanedPIP.ResourceGroupName
-                    $pipLocation            = $orphanedPIP.Location
-                    $pipSku                 = $orphanedPIP.Sku.Name
-                    $pipAllocationMethod    = $orphanedPIP.PublicIpAllocationMethod
-                    $pipId                  = $orphanedPIP.id
+                    $pipName = $orphanedPIP.Name
+                    $pipRgName = $orphanedPIP.ResourceGroupName
+                    $pipLocation = $orphanedPIP.Location
+                    $pipSku = $orphanedPIP.Sku.Name
+                    $pipAllocationMethod = $orphanedPIP.PublicIpAllocationMethod
+                    $pipId = $orphanedPIP.id
                     #$pipTags                = $orphanedPIP.TagsTable
 
                     $pipProps = [ordered]@{
@@ -211,6 +186,9 @@ function Get-AzOrphanedResources {
             }
         }
 
+        #----------------------------------------------------------------------------------------
+        # Module to check for Orphaned NICs
+        #----------------------------------------------------------------------------------------
         function Get-AzOrphanedNICs {
             [CmdletBinding()]
             param()
@@ -220,11 +198,11 @@ function Get-AzOrphanedResources {
 
                 foreach ($orphanedNIC in $orphanicNICs) {
 
-                    $nicName            = $orphanedNIC.Name
-                    $nicRgName          = $orphanedNIC.ResourceGroupName
-                    $nicLocation        = $orphanedNIC.Location
-                    $nicIpConfigCount   = $orphanedNIC.IpConfigurations.Count
-                    $nicId              = $orphanedNIC.id
+                    $nicName = $orphanedNIC.Name
+                    $nicRgName = $orphanedNIC.ResourceGroupName
+                    $nicLocation = $orphanedNIC.Location
+                    $nicIpConfigCount = $orphanedNIC.IpConfigurations.Count
+                    $nicId = $orphanedNIC.id
                     #$nicTags            = $orphanedNIC.TagsTable
 
                     $nicProps = [ordered]@{
@@ -241,6 +219,9 @@ function Get-AzOrphanedResources {
             }
         }
         
+        #----------------------------------------------------------------------------------------
+        # Module to check for Orphaned Managed Disks
+        #----------------------------------------------------------------------------------------
         function Get-AzOrphanedManagedDisks {
             [CmdletBinding()]
             param ()
@@ -277,6 +258,9 @@ function Get-AzOrphanedResources {
             
         }
 
+        #----------------------------------------------------------------------------------------
+        # Module to check for Orphaned Unmanaged Disks
+        #----------------------------------------------------------------------------------------
         function Get-AzOrphanedUnmanagedDisks {
             [CmdletBinding()]
             param ()
@@ -285,41 +269,52 @@ function Get-AzOrphanedResources {
 
                 $storageAccounts = Get-AzStorageAccount
                 foreach ($storageAccount in $storageAccounts) {
-                    $storageKey = (Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction SilentlyContinue)[0].Value
-                    $context = New-AzStorageContext -StorageAccountName $storageAccount.StorageAccountName -StorageAccountKey $storageKey
-                    $containers = Get-AzStorageContainer -Context $context -ErrorAction silentlycontinue
-                    foreach ($container in $containers) {
-                        $blobs = Get-AzStorageBlob -Container $container.Name -Context $context | Where-Object { $_.BlobType -eq 'PageBlob' -and $_.Name.EndsWith('.vhd') }
-                        foreach ($blob in $blobs) {
-                            if ($blob.ICloudBlob.Properties.LeaseStatus -eq 'Unlocked') {
-                                $unmngDiskName = $blob.ICloudBlob.Name
-                                $unmngDiskRgName = $storageAccount.ResourceGroupName
-                                $unmngDiskLocation = $StorageAccount.Location
-                                $unmngDiskUri = $blob.IcloudBlob.Uri.AbsoluteUri
-                                $unmngDiskSku = $storageAccount.Sku.Name
-                                $unmngDiskSize = [MATH]::floor([decimal]($blob.ICloudBlob.Properties.Length) / 1073741824)
-                                #$stgAcctTags = $storageAccount.Tags
+                    $stgAcct = Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction SilentlyContinue
+                    if ($stgAcct -ne $null) {
+                        if ($stgAcct[0].value) {
+                            $storageKey = (Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction SilentlyContinue)[0].Value
+                            $context = New-AzStorageContext -StorageAccountName $storageAccount.StorageAccountName -StorageAccountKey $storageKey
+                            $containers = Get-AzStorageContainer -Context $context -ErrorAction silentlycontinue
+                            foreach ($container in $containers) {
+                                $blobs = Get-AzStorageBlob -Container $container.Name -Context $context | Where-Object { $_.BlobType -eq 'PageBlob' -and $_.Name.EndsWith('.vhd') }
+                                foreach ($blob in $blobs) {
+                                    if ($blob.ICloudBlob.Properties.LeaseStatus -eq 'Unlocked') {
+                                        $unmngDiskName = $blob.ICloudBlob.Name
+                                        $unmngDiskRgName = $storageAccount.ResourceGroupName
+                                        $unmngDiskLocation = $StorageAccount.Location
+                                        $unmngDiskUri = $blob.IcloudBlob.Uri.AbsoluteUri
+                                        $unmngDiskSku = $storageAccount.Sku.Name
+                                        $unmngDiskSize = [MATH]::floor([decimal]($blob.ICloudBlob.Properties.Length) / 1073741824)
+                                        #$stgAcctTags = $storageAccount.Tags
 
-                                $unmngDiskProps = [ordered]@{
-                                    Disk_Name      = $unmngDiskName
-                                    Disk_Type      = "Unmanaged"
-                                    Resource_Group = $unmngDiskRgName
-                                    Location       = $unmngDiskLocation
-                                    Disk_URI       = $unmngDiskUri
-                                    Disk_Tier      = $unmngDiskSku
-                                    Disk_Size_GB   = $unmngDiskSize
-                                    #Stg_Acct_Tags  = $stgAcctTags
+                                        $unmngDiskProps = [ordered]@{
+                                            Disk_Name      = $unmngDiskName
+                                            Disk_Type      = "Unmanaged"
+                                            Resource_Group = $unmngDiskRgName
+                                            Location       = $unmngDiskLocation
+                                            Disk_URI       = $unmngDiskUri
+                                            Disk_Tier      = $unmngDiskSku
+                                            Disk_Size_GB   = $unmngDiskSize
+                                            #Stg_Acct_Tags  = $stgAcctTags
+                                        }
+
+                                        New-Object -TypeName psobject -Property $unmngDiskProps
+                                            
+                                    }
                                 }
-
-                                New-Object -TypeName psobject -Property $unmngDiskProps
-                                
                             }
                         }
+                    }
+                    Else {
+                        #Unable to access Storage Key
                     }
                 }
             }
         }
 
+        #----------------------------------------------------------------------------------------
+        # Module to get subs from the Tenant
+        #----------------------------------------------------------------------------------------
         Function Get-AzSubsFromTenant {
             [CmdletBinding()]
             param (
@@ -347,6 +342,7 @@ function Get-AzOrphanedResources {
                 Write-Verbose "Getting list of Azure Subscriptions"
                 $azSubs = Get-AzSubscription
                 $tenantProps = @()
+                $i = 0
 
                 foreach ($azSub in $azSubs) {
                     Write-Verbose "Getting information about $Azsub"
@@ -354,16 +350,77 @@ function Get-AzOrphanedResources {
                     $subId = $azSub.SubscriptionID
                     $subTenantId = $azSub.TenantID
                     $subProps = [pscustomobject]@{
+                        index       = $i
                         subName     = $subName
                         subID       = $subId
                         subTenantId = $subTenantId
                     }
                     $tenantProps += $subProps
+                    $i++
                 }
                 return $tenantProps
             }
         }
 
+        function Read-AzSubsToRunAgainst() {
+            $input_subs = @()
+            $user_input = Read-Host "Select Subscriptions (example: 0,2)"
+            $input_subs = $user_input.Split(',') | ForEach-Object { [int]$_ }
+            return $input_subs
+        }
+
+        #----------------------------------------------------------------------------------------
+        # Modules to determine path to save Excel file
+        #----------------------------------------------------------------------------------------
+        function Get-DesktopPath {
+            [CmdletBinding()]
+            Param(
+                [Parameter(
+                    ValueFromPipeline = $true
+                )]
+                [string]
+                $date
+            )
+
+            process { 
+                If ($env:HOME) {
+                    Write-Verbose "Running on a non Windows.  Saving file to /users/%USERNAME%/Desktop"
+                    $path = "$env:HOME/Desktop/Orphaned-Resources-$date.xlsx"
+                }
+                else {
+                    Write-Verbose "Running a Windows PC. Saving file to C:\users\%USERNAME%\Desktop"
+                    $path = "$env:HOMEPATH\Desktop\Orphaned-Resources-$date.xlsx"
+                }
+                return $path
+            }
+        }
+
+        #----------------------------------------------------------------------------------------
+        # Modules to validate user input
+        #----------------------------------------------------------------------------------------
+        function Confirm-Numeric ($Value) {
+            return $Value -match "^[\d\.]+$"
+        }
+
+        function Confirm-ValidSelectedIds($ids, $subs) {
+            if ($ids.Length -gt $subs.Length) {
+                Write-Host -fore red "Too many subscription indexes selected." -Verbose
+                return 1
+            }
+            for ($i = 0; $i -le $ids.Length - 1; $i++) {
+                $index = [int]$ids[$i]
+                $is_numeric = Confirm-Numeric $index
+                if (!$is_numeric) {
+                    Write-Host -fore red "Invalid subscription selection, enter only numbers." -Verbose
+                    return 1
+                }
+                if ($index -gt $subs.Length - 1) {
+                    Write-Host -fore red "Invalid subscription selection, only select valid indexes." -Verbose
+                    return 1
+                }
+            }
+            return 0
+        }
         Write-Verbose "Ensure PowerShell 5.1 or later is installed"
         If (Confirm-PSVersion) {
             Write-Verbose "PowerShell 5.1 or later is installed"
@@ -377,8 +434,13 @@ function Get-AzOrphanedResources {
             Exit
         }
 
+        #----------------------------------------------------------------------------------------
+        # Main Function
+        #----------------------------------------------------------------------------------------
+        
+        #Validate necessary modules are installed
         Write-Verbose "Ensuring the proper PowerShell Modules are installed"
-        $installedModules = Confirm-ModulesInstalled -modules az.accounts, az.resources
+        $installedModules = Confirm-ModulesInstalled -modules az.accounts, az.resources, ImportExcel
 
         foreach ($installedModule in $installedModules) {
             $moduleName = $installedModule.ModuleName
@@ -394,46 +456,71 @@ function Get-AzOrphanedResources {
             }
         }
 
+        # Defining all variables
         $Date = (Get-Date).ToShortDateString().Replace("/", "-")
-
         $orphanedNICs = @()
         $orphanedPIPs = @()
         $orphanedNSGs = @()
         $orphanedMngDisks = @()
         $orphanedUnmngDisks = @()
+        $selectedAzSubs = @()
 
-        $AzTenats = Get-AzSubsFromTenant
+        #Gathering and determine which subs to run against. 
+        $azSubs = Get-AzSubsFromTenant 
+        Write-Output $azSubs | Format-Table -AutoSize
 
+        $selectedSubIds = Read-AzSubsToRunAgainst
+
+        $selectedSubsValid = Confirm-ValidSelectedIds $selectedSubIds $azSubs
+        if ($selectedSubsValid -ne 0) {
+            exit
+        }
+        Else {
+            #Sub selection valid
+        }
+
+        ForEach ($selectedSubId in $selectedSubIds) {
+            $sub = $azSubs | Where-Object { $_.Index -eq $selectedSubId }
+            $selectedAzSubs += $sub
+        }
         
-        foreach ($AzSub in $AzTenats) {
-            Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId
+        ## Finding orphaned resources in each sub
+        foreach ($azSub in $selectedAzSubs) {
+            $outNull = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | select -expand name
+            $azSubName = $azSub.subName
+            Write-Host "Checking for orphaned resources in sub: $azSubName" -ForegroundColor green
             $subOrphanedNICs = Get-AzOrphanedNICs
             $subOrphanedPIPs = Get-AzOrphanedPublicIps
             $subOrphanedNSGs = Get-AzOrphangedNetworkSecurityGroups
             $subOrphanedMngDisks = Get-AzOrphanedManagedDisks
-            #$subOrphanedUnmngDisks = Get-AzOrphanedUnmanagedDisks
+            $subOrphanedUnmngDisks = Get-AzOrphanedUnmanagedDisks
 
             $orphanedNICs += $subOrphanedNICs
             $orphanedPIPs += $subOrphanedPIPs
             $orphanedNSGs += $subOrphanedNSGs
             $orphanedMngDisks += $subOrphanedMngDisks
-            #$orphanedUnMngDisks += $subOrphanedUnmngDisks
+            $orphanedUnMngDisks += $subOrphanedUnmngDisks
         }
 
+        $excelPath = Get-DesktopPath -date $date
 
-        $orphanedPIPs | ConvertTo-Csv -NoTypeInformation | Out-File /tmp/orphaned-publicips-$date.csv
+        ## Remove existing orphaned resource report
+        If (Test-Path $excelPath) {
+            Remove-Item $excelPath -Force
+        }
 
-        $orphanedNSGs | ConvertTo-Csv -notypeInformation | Out-File /tmp/orphaned-nsgs-$date.csv
-
-        $orphanedNICs | ConvertTo-Csv -notypeInformation | Out-File /tmp/orphaned-nics-$date.csv
-
-        $orphanedMngDisks | ConvertTo-Csv -notypeInformation | Out-File /tmp/orphaned-mng-disks-$date.csv
-
-        $orphanedUnmngDisks | ConvertTo-Csv -notypeInformation | Out-File /tmp/orphaned-unmng-disk-$date.csv
+        #Outputing Excel File to current users desktop
+        $orphanedPIPs | Export-Excel -Path $excelPath -WorksheetName "Public IPs"
+        $orphanedNSGs | Export-Excel -Path $excelPath -WorksheetName "NSGs"
+        $orphanedNICs | Export-Excel -Path $excelPath -WorksheetName "NICs"
+        $orphanedMngDisks | Export-Excel -Path $excelPath -WorksheetName "Managed Disks"
+        $orphanedUnmngDisks | Export-Excel -Path $excelPath -WorksheetName "Unmanaged Disks"
 
     }
 
 }
+
+
 
 Get-AzOrphanedResources
 
