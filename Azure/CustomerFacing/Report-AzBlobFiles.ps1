@@ -1,9 +1,13 @@
 <# 
 
 To Do List
-1. Determine how to lookup costs 
+1. Determine how to lookup costs for the indivudal blobss
 
 #>
+
+######################################################
+#----------------Define Parameters-------------------#
+######################################################
 
 Param(
     [Parameter(
@@ -45,7 +49,12 @@ Param(
         Mandatory = $true,
         HelpMessage = "Age at which files become eligable for deletion"
     )]
-    [string]$maximumAge
+    [string]$maximumAge,
+    [Parameter(
+        Mandatory = $true,
+        HelpMessage = "Define the receipient of the message"
+    )]
+    [String]$receipient
 )
 
 ######################################################
@@ -57,73 +66,89 @@ $minimumDate = (Get-Date).addMinutes(-$minimumAge)
 $maximumDate = (Get-Date).addDays(-$maximumAge)
 
 ######################################################
-#----------------Define Functions--------------------#
+#----------------Define Modules---------------------#
 ######################################################
 
+
+# This will get the Blobs from the one or more storaage accounts
+# If a storage account is not specified then it will run against all storage accounts in the subscription
 function Get-AzBlobs {
     [CmdletBinding()]
     param (
         [Parameter(
-            mandatory=$false
+            mandatory=$false,
+             HelpMessage = "Pleases specific a storage account to run against (If none defined it will run against all in the subscription)."
         )]
         [string]$storageAccountName,
         [Parameter(
-            mandatory=$false
+            mandatory=$false,
+             HelpMessage = "Please specify the resource group of the Storage Account in the 'StorageAccountName' parameter."
         )]
         [string]$resourceGroupName
     )
 
     process {
-
-        if(!$storageAccountName){
-            $storageAccounts = Get-AzStorageAccount
-        }Else{
-            $storageAccounts = Get-AzStorageAccount -Name $storageAccountName -ResourceGroupName $resourceGroupName
+        try{
+            if(!$storageAccountName){
+                $storageAccounts = Get-AzStorageAccount
+            }Else{
+                $storageAccounts = Get-AzStorageAccount -Name $storageAccountName -ResourceGroupName $resourceGroupName
+            }
         }
+        catch{
+            Write-Host "Error getting details about the storage accounts" -ForegroundColor Red
+            Write-Host "Error Msg: $_" -ForegroundColor Red
+        }
+        try{
+            foreach ($storageAccount in $storageAccounts) {
+                $stgAcct = Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction SilentlyContinue
+                if ($stgAcct -ne $null) {
+                    if ($stgAcct[0].value) {
+                        $storageKey = (Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction SilentlyContinue)[0].Value
+                        $context = New-AzStorageContext -StorageAccountName $storageAccount.StorageAccountName -StorageAccountKey $storageKey
+                        $containers = Get-AzStorageContainer -Context $context -ErrorAction silentlycontinue
+                        foreach ($container in $containers) {
+                            $blobs = Get-AzStorageBlob -Container $container.Name -Context $context | Where-Object { $_.ICloudBlob.Properties.Created -lt $minimumDate -and $_.Name.EndsWith($fileExtension) }
+                            foreach ($blob in $blobs) {
+                                $blobName = $blob.ICloudBlob.Name
+                                $blobRgName = $storageAccount.ResourceGroupName
+                                $blobLocation = $storageAccount.Location
+                                $blobUri = $blob.IcloudBlob.Uri.AbsoluteUri
+                                $blobTier = $blob.ICloudBlob.Properties.StandardBlobTier
+                                $blobCreatedOn = $blob.ICloudBlob.Properties.Created
+                                $blobLastModified = $blob.ICloudBlob.Properties.LastModified
+                                $blobSize = [MATH]::floor([decimal]($blob.ICloudBlob.Properties.Length) / 1073741824)
 
-        foreach ($storageAccount in $storageAccounts) {
-            $stgAcct = Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction SilentlyContinue
-            if ($stgAcct -ne $null) {
-                if ($stgAcct[0].value) {
-                    $storageKey = (Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction SilentlyContinue)[0].Value
-                    $context = New-AzStorageContext -StorageAccountName $storageAccount.StorageAccountName -StorageAccountKey $storageKey
-                    $containers = Get-AzStorageContainer -Context $context -ErrorAction silentlycontinue
-                    foreach ($container in $containers) {
-                        $blobs = Get-AzStorageBlob -Container $container.Name -Context $context | Where-Object { $_.ICloudBlob.Properties.Created -lt $minimumDate -and $_.Name.EndsWith($fileExtension) }
-                        foreach ($blob in $blobs) {
-                            $blobName = $blob.ICloudBlob.Name
-                            $blobRgName = $storageAccount.ResourceGroupName
-                            $blobLocation = $storageAccount.Location
-                            $blobUri = $blob.IcloudBlob.Uri.AbsoluteUri
-                            $blobTier = $blob.ICloudBlob.Properties.StandardBlobTier
-                            $blobCreatedOn = $blob.ICloudBlob.Properties.Created
-                            $blobLastModified = $blob.ICloudBlob.Properties.LastModified
-                            $blobSize = [MATH]::floor([decimal]($blob.ICloudBlob.Properties.Length) / 1073741824)
+                                $unmngDiskProps = [ordered]@{
+                                    Name           = $blobName
+                                    Size           = $blobSize
+                                    Resource_Group = $blobRgName
+                                    Location       = $blobLocation
+                                    URI            = $blobUri
+                                    Tier           = $blobTier
+                                    Created        = $blobCreatedOn
+                                    Last_Modified  = $blobLastModified
+                                    StorageAccount = $storageAccount.StorageAccountName
+                                }
 
-                            $unmngDiskProps = [ordered]@{
-                                Name           = $blobName
-                                Size           = $blobSize
-                                Resource_Group = $blobRgName
-                                Location       = $blobLocation
-                                URI            = $blobUri
-                                Tier           = $blobTier
-                                Created        = $blobCreatedOn
-                                Last_Modified  = $blobLastModified
-                                StorageAccount = $storageAccount.StorageAccountName
+                                New-Object -TypeName psobject -Property $unmngDiskProps
                             }
-
-                            New-Object -TypeName psobject -Property $unmngDiskProps
                         }
                     }
                 }
+                Else {
+                    #Unable to access Storage Key
+                }
             }
-            Else {
-                #Unable to access Storage Key
-            }
+        }
+        Catch{
+            Write-Host "Error getting blob details from Storage Account $storageAccount" -ForegroundColor Red
+            Write-Host "Error Msg: $_" -ForegroundColor Red
         }
     }
 }
 
+# This module will get the bearer token.  This is used to authenticate against Azure when pulling pricing data
 function Get-AzBearerToken {
     [CmdletBinding()]
     param()
@@ -149,48 +174,68 @@ function Get-AzBearerToken {
         
             return $props
         }catch{
-            Write-Debug "Error occurred getting Bearer Token"
+            Write-Host "Error getting Bearer Token" -ForegroundColor Red
+            Write-Host "Error Msg: $_" -ForegroundColor Red
         }
     }
 }
 
+# This module leverages the Bearer Token from module 'Get-AzBearerToken' for authentication
+# It pulls the rate card for the United States Azure subscription.  
 function Get-AzRateCard {
     [CmdletBinding()]
     param(
         [Parameter(
-            mandatory=$true
+            mandatory=$true,
+             HelpMessage = "Please specifiy the bearer token used for authentication.  Run the 'Get-AzBearerToken' module to get a bearer token"
         )]
         [string]$bearerToken
     )
     process {
-        $props = Invoke-RestMethod -URI 'https://management.azure.com/subscriptions/ce6ec219-6d67-4ef2-a9e0-c89fe111c4e4/providers/Microsoft.Commerce/RateCard?api-version=2016-08-31-preview&$filter=OfferDurableId+eq+%27MS-AZR-0003p%27+and+Locale+eq+%27en-US%27+and+Regioninfo+eq+%27US%27+and+Currency+eq+%27USD%27' `
-            -Method 'GET' `
-            -Header @{'Authorization' = $bearerToken }
-        
-        return $props
+        try{
+            $props = Invoke-RestMethod -URI 'https://management.azure.com/subscriptions/ce6ec219-6d67-4ef2-a9e0-c89fe111c4e4/providers/Microsoft.Commerce/RateCard?api-version=2016-08-31-preview&$filter=OfferDurableId+eq+%27MS-AZR-0003p%27+and+Locale+eq+%27en-US%27+and+Regioninfo+eq+%27US%27+and+Currency+eq+%27USD%27' `
+                -Method 'GET' `
+                -Header @{'Authorization' = $bearerToken }
+            
+            return $props
+        }
+        catch{
+            Write-Host "Error getting Blobs from Storage Account $storageAccount" -ForegroundColor Red
+            Write-Host "Error msg $_" -ForegroundColor Red
+        }
     }
 }
 
+
+# This module uses information provided by the rate card to determine estimated cost of various resources.
+# It is not generalized and it specific to Azure Blob costs at this point.  
 function Get-AzResourceCost {
     [CmdletBinding()]
     param(
         [Parameter(
-            mandatory = $true
+            mandatory = $true,
+            HelpMessage = "Provide a Blob Object to pull the approximate cost information for."
         )]
         [object[]]$blob
     )
     process {
-        $stgAcct = Get-AzStorageAccount -Name $blob.storageAccount -ResourceGroupName $blob.Resource_Group
-        $BlobRepl = ($stgAcct.Sku.Name).Split("_") | Select-Object -Last 1
-        $BlobTier = $blob.Tier
-        $rawLocation = $stgAcct.Location
-        switch ($rawLocation) {
-            northcentralus { $location = "US North Central" }
-            centralus { $location = "US Central" }
-            eastus { $location = "US East" }
-            eastus2 { $location = "US East 2" }
-            westus { $location = "US West" }
-            westus2 { $location = "US West 2" }
+        try{
+            $stgAcct = Get-AzStorageAccount -Name $blob.storageAccount -ResourceGroupName $blob.Resource_Group
+            $BlobRepl = ($stgAcct.Sku.Name).Split("_") | Select-Object -Last 1
+            $BlobTier = $blob.Tier
+            $rawLocation = $stgAcct.Location
+            switch ($rawLocation) {
+                northcentralus { $location = "US North Central" }
+                centralus { $location = "US Central" }
+                eastus { $location = "US East" }
+                eastus2 { $location = "US East 2" }
+                westus { $location = "US West" }
+                westus2 { $location = "US West 2" }
+            }
+        }
+        catch{
+            Write-Host "Error getting details about the Blob - $Blob" -ForegroundColor Red
+            Write-Host "Error msg $_" -ForegroundColor Red
         }
 
         $MeterName = $BlobTier.ToString() + " " + $BlobRepl + " Data Stored"
@@ -205,6 +250,7 @@ function Get-AzResourceCost {
     }
 }
 
+#  Filler module to get the cost of the Azure Blobs.  Will leverage the 'Get-AzResourceCost' module 
 function Get-AzBlobCost {
     [CmdletBinding()]
     param(
@@ -222,23 +268,29 @@ function Get-AzBlobCost {
     }
 }
 
+# This module will leverage the SendGril email service. 
+# It requires 
 function Send-SendGridEmail {
     [CmdletBinding()]
     param(
         [Parameter(
-            mandatory=$true
+            mandatory=$true,
+            HelpMessage = "This is the API key provided by SendGrid"
         )]
         [string]$API,
         [Parameter(
-            mandatory = $true
+            mandatory = $true,
+            HelpMessage = "This is the list of recepients that will be receiving the email."
         )]
         [string]$Recepients,
         [Parameter(
-            mandatory = $true
+            mandatory = $true,
+            HelpMessage = "Please provide the Blob Objects to pass along"
         )]
         [object[]]$Blobs,
         [Parameter(
-            mandatory = $true
+            mandatory = $true,
+            HelpMessage = "If the blob objects are enough to be eligable for deletion then please set this flag to true.  Otherwise set to false"
         )]
         [boolean]$ElegiableForDeletion
     )
@@ -288,14 +340,19 @@ function Send-SendGridEmail {
                 "name":"$senderName"
             }
         }'
-
-        Invoke-WebRequest -URI https://api.sendgrid.com/v3/mail/send `
-            -Method 'POST' `
-            -Headers @{
-                'authorization'= $bearerToken
-                'content-type'='application/json'
-            } `
-            -Body $messageBody
+        try{
+            Invoke-WebRequest -URI https://api.sendgrid.com/v3/mail/send `
+                -Method 'POST' `
+                -Headers @{
+                    'authorization'= $bearerToken
+                    'content-type'='application/json'
+                } `
+                -Body $messageBody
+         }
+        catch{
+            Write-Host "Error sending email via Sendgrid." -ForegroundColor Red
+            Write-Host "Error msg $_" -ForegroundColor Red
+        }
     }
 }
 
@@ -352,11 +409,11 @@ $SendGridAPI = Get-AzKeyVaultSecret -VaultName $keyVaultName -Name $apiSecretNam
 
 # Sending email reports on blobs.  Seperate emails are sent depending on if they 
 If ($blobsEligableForDeletion){
-    Send-SendGridEmail -Recepients joe.fecht@thinkahead.com -api $SendGridAPI -blobs $blobsEligableForDeletion -ElegiableForDeletion $true
+    Send-SendGridEmail -Recepients $recipient -api $SendGridAPI -blobs $blobsEligableForDeletion -ElegiableForDeletion $true
 }
 
 If ($blobsToReport){
-    Send-SendGridEmail -Recepients joe.fecht@thinkahead.com -api $SendGridAPI -blobs $blobsToReport -ElegiableForDeletion $false
+    Send-SendGridEmail -Recepients $recepient -api $SendGridAPI -blobs $blobsToReport -ElegiableForDeletion $false
 }
 
 write-output $blobsEligableForDeletion
