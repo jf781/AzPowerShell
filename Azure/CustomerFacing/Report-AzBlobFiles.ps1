@@ -210,25 +210,39 @@ TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
         $senderAddress = "azstoragereports@alixpartners.com"
         $senderName = "Azure Archive Storage Report"
 
-        $messageBody = [ordered]@{
-                            personalizations= @(@{to = @(@{email =  "$recipients"})
-                                subject = "$subject" })
-                                from = @{
-                                    email = "$senderAddress"
-                                    name  = "$senderName"
-                                }
-                                content = @( @{ type = "text/html"
-                                            value = "$body" }
-                                )} | ConvertTo-Json -Depth 10
         try{
-            Invoke-RestMethod -URI "https://api.sendgrid.com/v3/mail/send" `
-                -Method POST `
-                -Headers @{
-                    'authorization'= $bearerToken
-                    'content-type'='application/json'
-                } `
-                -Body $messageBody
-         }
+            # Splitting email addresses
+            if($recipients.contains(",")){
+                $emailRecipients = $recipients.split(",")
+            }ElseIf($recipients.contains(";")){
+                $emailRecipients = $recipients.split(";")
+            }Else{
+                $emailRecipients = $recipients
+            }
+
+            # Send an email to each recipient
+            foreach($emailRecipient in $emailRecipients){
+
+                $messageBody = [ordered]@{
+                                    personalizations= @(@{to = @(@{email =  "$emailrecipient"})
+                                        subject = "$subject" })
+                                        from = @{
+                                            email = "$senderAddress"
+                                            name  = "$senderName"
+                                        }
+                                        content = @( @{ type = "text/html"
+                                                    value = "$body" }
+                                        )} | ConvertTo-Json -Depth 10
+            
+                Invoke-RestMethod -URI "https://api.sendgrid.com/v3/mail/send" `
+                    -Method POST `
+                    -Headers @{
+                        'authorization'= $bearerToken
+                        'content-type'='application/json'
+                    } `
+                    -Body $messageBody
+            }
+        }
         catch{
             Write-Host "Error sending email via Sendgrid." -ForegroundColor Red
             Write-Host "Error msg $_" -ForegroundColor Red
