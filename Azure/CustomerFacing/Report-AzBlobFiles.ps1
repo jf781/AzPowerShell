@@ -33,12 +33,12 @@ Param(
         Mandatory = $true,
         HelpMessage = "Minimum Age of the files to report on"
     )]
-    [string]$minimumAge,
+    [string]$minimumAgeInDays,
     [Parameter(
         Mandatory = $true,
         HelpMessage = "Age at which files become eligable for deletion"
     )]
-    [string]$maximumAge,
+    [string]$maximumAgeInDays,
     [Parameter(
         Mandatory = $true,
         HelpMessage = "Define the recipient of the message"
@@ -51,8 +51,8 @@ Param(
 ######################################################
 
 # Define Caluclated Variables
-$minimumDate = (Get-Date).addMinutes(-$minimumAge)
-$maximumDate = (Get-Date).addDays(-$maximumAge)
+$minimumDate = (Get-Date).addMinutes(-$minimumAgeInDays)
+$maximumDate = (Get-Date).addDays(-$maximumAgeInDays)
 
 ######################################################
 #----------------Define Modules---------------------#
@@ -152,72 +152,74 @@ function Send-SendGridEmail {
             mandatory=$true,
             HelpMessage = "This is the API key provided by SendGrid"
         )]
-        [string]$API,
+        [string]$api,
         [Parameter(
             mandatory = $true,
             HelpMessage = "This is the list of recipients that will be receiving the email."
         )]
-        [string]$Recipients,
+        [string]$recipients,
         [Parameter(
             mandatory = $true,
             HelpMessage = "Please provide the Blob Objects to pass along"
         )]
-        [object[]]$Blobs,
+        [object[]]$blobs,
         [Parameter(
             mandatory = $true,
             HelpMessage = "If the blob objects are enough to be eligable for deletion then please set this flag to true.  Otherwise set to false"
         )]
-        [boolean]$ElegiableForDeletion
+        [boolean]$elegiableForDeletion
     )
     process {
 
         # Authentication for SendGrid API
-        $bearerToken = "Bearer " +$API
+        $bearerToken = "Bearer " + $API
+
+        # Format Blob output
+
+        $Header = @"
+<style>TABLE {border-width: 1px; border-style: solid; border-color: black; border-collapse: collapse;}
+TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
+</style>
+"@
+
+        $formattedBlobs = $blobs | ConvertTo-Html -Property Name,SizeInGB,Resource_Group,Location,Tier,Created,Last_Modified,URI -Head $Header
 
         # Details for Message
         $date = (Get-Date).ToShortDateString() -replace "/", "-"
+
+    
         If($ElegiableForDeletion){
             $subject = "Azure Archive Storage files eligable for deletion - $date"
-            $body = "The following files are were added to the Archive over 36 months ago.
-                    $Blobs"
+            $body = "The following files are were added to the Archive over 36 months ago: 
+                    <br>
+                    --
+                    <br>
+                    $formattedBlobs"
         }
         Else{
             $subject = "Azure Archive Storage Report - $date"
-            $body = "The following files were added within the last 36 months to Azure Storage Report
-                    $Blobs"
+            $body = "The following files were added within the last 36 months to Azure Storage Report:
+                    <br>
+                    --
+                    <br>
+                    $formattedBlobs"
         }
-        $senderAddress = "llubinski@alixpartners.com"
-        $senderName = "Lawrence Lubinski"
+        $senderAddress = "azstoragereports@alixpartners.com"
+        $senderName = "Azure Archive Storage Report"
 
-        $messageBody = '{
-            "personalizations":[
-                {
-                    "to":[
-                        {
-                            "email": $Recipients,
-                        }
-                    ],
-                    "subject":"$Subject",
-                }
-            ],
-            "content":[
-                {
-                    "type": "text/plain",
-                    "value": "$Body"
-                }
-            ],
-            "from":{
-                "email":"$senderAddress",
-                "name":"$senderName"
-            },
-            "reply_to":{
-                "email":"$senderAddress",
-                "name":"$senderName"
-            }
-        }'
+        $messageBody = [ordered]@{
+                            personalizations= @(@{to = @(@{email =  "$recipients"})
+                                subject = "$subject" })
+                                from = @{
+                                    email = "$senderAddress"
+                                    name  = "$senderName"
+                                }
+                                content = @( @{ type = "text/html"
+                                            value = "$body" }
+                                )} | ConvertTo-Json -Depth 10
         try{
-            Invoke-WebRequest -URI https://api.sendgrid.com/v3/mail/send `
-                -Method 'POST' `
+            Invoke-RestMethod -URI "https://api.sendgrid.com/v3/mail/send" `
+                -Method POST `
                 -Headers @{
                     'authorization'= $bearerToken
                     'content-type'='application/json'
@@ -271,7 +273,7 @@ Foreach ($blob in $blobs) {
         # Blobs are older then defined age so eligable to be deleted 
         $blobsEligableForDeletion = [Array]$blobsEligableForDeletion + $blob
     }
-    ElseIf ($blob.created -gt $minimumDate) {
+    Elseif ($blob.created -lt $minimumDate){
         # Blobs are not old enough to be deleted
         $blobsToReport = [Array]$blobsToReport + $blob
     }
@@ -280,15 +282,15 @@ Foreach ($blob in $blobs) {
     }
 }
 
-$SendGridAPI = Get-AzKeyVaultSecret -VaultName $keyVaultName -Name $apiSecretName | Select-Object -ExpandProperty SecretValueText
+$sendGridAPI = Get-AzKeyVaultSecret -VaultName $keyVaultName -Name $apiSecretName | Select-Object -ExpandProperty SecretValueText
 
 # Sending email reports on blobs.  Seperate emails are sent depending on if they 
 If ($blobsEligableForDeletion){
-    Send-SendGridEmail -Recipients $recipient -api $SendGridAPI -blobs $blobsEligableForDeletion -ElegiableForDeletion $true
+    Send-SendGridEmail -recipients $recipient -api $sendGridAPI -blobs $blobsEligableForDeletion -elegiableForDeletion $true
 }
 
 If ($blobsToReport){
-    Send-SendGridEmail -Recipients $recipient -api $SendGridAPI -blobs $blobsToReport -ElegiableForDeletion $false
+    Send-SendGridEmail -recipients $recipient -api $sendGridAPI -blobs $blobsToReport -ElegiableForDeletion $false
 }
 
 Write-Output "These blobs are have not been modified since at least $maximumDate and are eligible for deletion."
