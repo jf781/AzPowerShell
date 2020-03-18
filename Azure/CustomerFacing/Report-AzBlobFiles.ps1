@@ -39,7 +39,7 @@ Param(
         Mandatory = $true,
         HelpMessage = "Name of file Extension to search for"
     )]
-    [string]$fileExtention,
+    [string]$fileExtension,
     [Parameter(
         Mandatory = $true,
         HelpMessage = "Minimum Age of the files to report on"
@@ -84,7 +84,13 @@ function Get-AzBlobs {
             mandatory=$false,
              HelpMessage = "Please specify the resource group of the Storage Account in the 'StorageAccountName' parameter."
         )]
-        [string]$resourceGroupName
+        [string]$resourceGroupName,
+        [Parameter(
+            mandatory = $true,
+            HelpMessage = "File extension of blobs to return."
+        )]
+        [string]$fileExt
+
     )
 
     process {
@@ -108,7 +114,7 @@ function Get-AzBlobs {
                         $context = New-AzStorageContext -StorageAccountName $storageAccount.StorageAccountName -StorageAccountKey $storageKey
                         $containers = Get-AzStorageContainer -Context $context -ErrorAction silentlycontinue
                         foreach ($container in $containers) {
-                            $blobs = Get-AzStorageBlob -Container $container.Name -Context $context | Where-Object { $_.ICloudBlob.Properties.Created -lt $minimumDate -and $_.Name.EndsWith($fileExtension) }
+                            $blobs = Get-AzStorageBlob -Container $container.Name -Context $context | Where-Object { $_.ICloudBlob.Properties.Created -lt $minimumDate -and $_.Name.EndsWith($fileExt) }
                             foreach ($blob in $blobs) {
                                 $blobName = $blob.ICloudBlob.Name
                                 $blobRgName = $storageAccount.ResourceGroupName
@@ -387,7 +393,7 @@ $AzureContext = Get-AzSubscription -SubscriptionId $connection.SubscriptionID
 # If none are specified it will check all storage accounts in the current context
 # It will only return blobs that meet the are older the then $MinimumDate that have a file extension defined. 
 
-$blobs = Get-AzBlobs -storageAccountName $storageAccountName -resourceGroupName $resourceGroupName 
+$blobs = Get-AzBlobs -storageAccountName $storageAccountName -resourceGroupName $resourceGroupName -fileExt $fileExtension
 
 # Checking each blob to see if it eligable for deletion
 
