@@ -31,7 +31,7 @@ Param(
     )]
     [string]$clientSecretName,
     [Parameter(
-        Mandatory = $false,
+        Mandatory = $true,
         HelpMessage = "Name of Secret for the API for SendGrid"
     )]
     [string]$APISecretName,
