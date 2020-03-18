@@ -26,11 +26,6 @@ Param(
     )]
     [string]$keyVaultName,
     [Parameter(
-        Mandatory = $false,
-        HelpMessage = "Name of Secret for the Client in AAD"
-    )]
-    [string]$clientSecretName,
-    [Parameter(
         Mandatory = $true,
         HelpMessage = "Name of Secret for the API for SendGrid"
     )]
@@ -151,126 +146,6 @@ function Get-AzBlobs {
             Write-Host "Error getting blob details from Storage Account $storageAccount" -ForegroundColor Red
             Write-Host "Error Msg: $_" -ForegroundColor Red
         }
-    }
-}
-
-# This module will get the bearer token.  This is used to authenticate against Azure when pulling pricing data
-function Get-AzBearerToken {
-    [CmdletBinding()]
-    param()
-    process {
-        try{
-            $clientSecret = Get-AzKeyVaultSecret -VaultName $keyVaultName -Name $clientSecretName | Select-Object -expand SecretValueText
-            
-            $token = Invoke-WebRequest -URI 'https://login.microsoftonline.com/3af1cd00-90be-4d09-bc8c-4fda26a55eac/oauth2/token' `
-                -Method 'POST' `
-                -Headers @{
-                'Content-Type' = 'application/x-www-form-urlencoded'
-            } `
-                -Body @{
-                'grant_type'    = 'client_credentials'
-                'client_id'     = 'af8e86c6-75d7-45f2-b2e4-06b2aba207bc'
-                'client_secret' = '$clientSecret'
-                'resource'      = 'https://management.azure.com/'     
-            }
-
-            $accessToken = (($token.Content.Split(",") | Select-Object -Last 1).Split(":") | Select-Object -Last 1).Split("}") | Select-Object -First 1
-
-            $props = 'Bearer ' + $accessToken -replace '"'
-        
-            return $props
-        }catch{
-            Write-Host "Error getting Bearer Token" -ForegroundColor Red
-            Write-Host "Error Msg: $_" -ForegroundColor Red
-        }
-    }
-}
-
-# This module leverages the Bearer Token from module 'Get-AzBearerToken' for authentication
-# It pulls the rate card for the United States Azure subscription.  
-function Get-AzRateCard {
-    [CmdletBinding()]
-    param(
-        [Parameter(
-            mandatory=$true,
-             HelpMessage = "Please specifiy the bearer token used for authentication.  Run the 'Get-AzBearerToken' module to get a bearer token"
-        )]
-        [string]$bearerToken
-    )
-    process {
-        try{
-            $props = Invoke-RestMethod -URI 'https://management.azure.com/subscriptions/ce6ec219-6d67-4ef2-a9e0-c89fe111c4e4/providers/Microsoft.Commerce/RateCard?api-version=2016-08-31-preview&$filter=OfferDurableId+eq+%27MS-AZR-0003p%27+and+Locale+eq+%27en-US%27+and+Regioninfo+eq+%27US%27+and+Currency+eq+%27USD%27' `
-                -Method 'GET' `
-                -Header @{'Authorization' = $bearerToken }
-            
-            return $props
-        }
-        catch{
-            Write-Host "Error getting Blobs from Storage Account $storageAccount" -ForegroundColor Red
-            Write-Host "Error msg $_" -ForegroundColor Red
-        }
-    }
-}
-
-
-# This module uses information provided by the rate card to determine estimated cost of various resources.
-# It is not generalized and it specific to Azure Blob costs at this point.  
-function Get-AzResourceCost {
-    [CmdletBinding()]
-    param(
-        [Parameter(
-            mandatory = $true,
-            HelpMessage = "Provide a Blob Object to pull the approximate cost information for."
-        )]
-        [object[]]$blob
-    )
-    process {
-        try{
-            $stgAcct = Get-AzStorageAccount -Name $blob.storageAccount -ResourceGroupName $blob.Resource_Group
-            $BlobRepl = ($stgAcct.Sku.Name).Split("_") | Select-Object -Last 1
-            $BlobTier = $blob.Tier
-            $rawLocation = $stgAcct.Location
-            switch ($rawLocation) {
-                northcentralus { $location = "US North Central" }
-                centralus { $location = "US Central" }
-                eastus { $location = "US East" }
-                eastus2 { $location = "US East 2" }
-                westus { $location = "US West" }
-                westus2 { $location = "US West 2" }
-            }
-        }
-        catch{
-            Write-Host "Error getting details about the Blob - $Blob" -ForegroundColor Red
-            Write-Host "Error msg $_" -ForegroundColor Red
-        }
-
-        $MeterName = $BlobTier.ToString() + " " + $BlobRepl + " Data Stored"
-
-        $props = $RateCard.Meters | Where-Object {
-            ($_.MeterSubCategory -eq "Tiered Block Blob") -and 
-            ($_.MeterName -eq $Metername) -and 
-            ($_.MeterRegion -eq $Location)
-        }
-
-        return $props
-    }
-}
-
-#  Filler module to get the cost of the Azure Blobs.  Will leverage the 'Get-AzResourceCost' module 
-function Get-AzBlobCost {
-    [CmdletBinding()]
-    param(
-        [Parameter(
-            mandatory=$true
-        )]
-        [object[]]$CostData,
-        [Parameter(
-            mandatory=$true
-        )]
-        [object[]]$Blob
-    )
-    process{
-        
     }
 }
 
