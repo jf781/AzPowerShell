@@ -1,9 +1,3 @@
-<# 
-
-To Do List
-1. Determine how to lookup costs for the indivudal blobss
-
-#>
 
 ######################################################
 #----------------Define Parameters-------------------#
@@ -150,7 +144,7 @@ function Get-AzBlobs {
 }
 
 # This module will leverage the SendGril email service. 
-# It requires 
+# It uses the API parameter to authenticate with the SendGrid service. 
 function Send-SendGridEmail {
     [CmdletBinding()]
     param(
@@ -241,9 +235,9 @@ function Send-SendGridEmail {
 #------------------Main Function --------------------#
 ######################################################
 
-# Login to Azure 
+# Logs into Azure 
 
-# Ensures you do not inherit an AzContext in your runbook
+# Ensures you do not inherit a AzContext in your runbook
 Disable-AzContextAutosave –Scope Process
 
 $connection = Get-AutomationConnection -Name AzureRunAsConnection
@@ -273,11 +267,11 @@ $blobs = Get-AzBlobs -storageAccountName $storageAccountName -resourceGroupName 
 # Checking each blob to see if it eligable for deletion
 
 Foreach ($blob in $blobs) {
-    if ($blob.Created -gt $maximumDate) {        
+    if ($blob.Created -lt $maximumDate) {        
         # Blobs are older then defined age so eligable to be deleted 
         $blobsEligableForDeletion = [Array]$blobsEligableForDeletion + $blob
     }
-    ElseIf ($blob.created -lt $minimumDate) {
+    ElseIf ($blob.created -gt $minimumDate) {
         # Blobs are not old enough to be deleted
         $blobsToReport = [Array]$blobsToReport + $blob
     }
@@ -297,5 +291,8 @@ If ($blobsToReport){
     Send-SendGridEmail -Recipients $recipient -api $SendGridAPI -blobs $blobsToReport -ElegiableForDeletion $false
 }
 
-write-output $blobsEligableForDeletion
-write-output $blobsToReport
+Write-Output "These blobs are have not been modified since at least $maximumDate and are eligible for deletion."
+Write-Output $blobsEligableForDeletion
+Write-Output "--"
+Write-Output "These blobs have been created/modified before $maximumDate"
+Write-Output $blobsToReport
