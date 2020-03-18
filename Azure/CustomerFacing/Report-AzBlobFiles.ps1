@@ -51,7 +51,7 @@ Param(
 ######################################################
 
 # Define Caluclated Variables
-$minimumDate = (Get-Date).addMinutes(-$minimumAgeInDays)
+$minimumDate = (Get-Date).addDays(-$minimumAgeInDays)
 $maximumDate = (Get-Date).addDays(-$maximumAgeInDays)
 
 ######################################################
@@ -115,15 +115,16 @@ function Get-AzBlobs {
                                 $blobSize = [MATH]::floor([decimal]($blob.ICloudBlob.Properties.Length) / 1073741824)
 
                                 $unmngDiskProps = [ordered]@{
-                                    Name           = $blobName
-                                    SizeInGB       = $blobSize
-                                    Resource_Group = $blobRgName
-                                    Location       = $blobLocation
-                                    URI            = $blobUri
-                                    Tier           = $blobTier
-                                    Created        = $blobCreatedOn
-                                    Last_Modified  = $blobLastModified
-                                    StorageAccount = $storageAccount.StorageAccountName
+                                    Name            = $blobName
+                                    SizeInGB        = $blobSize
+                                    Resource_Group  = $blobRgName
+                                    Location        = $blobLocation
+                                    URI             = $blobUri
+                                    Tier            = $blobTier
+                                    Created         = $blobCreatedOn
+                                    Last_Modified   = $blobLastModified
+                                    Storage_Account = $storageAccount.StorageAccountName
+                                    Container_Name  = $container.Name
                                 }
 
                                 New-Object -TypeName psobject -Property $unmngDiskProps
@@ -178,11 +179,13 @@ function Send-SendGridEmail {
 
         $Header = @"
 <style>TABLE {border-width: 1px; border-style: solid; border-color: black; border-collapse: collapse;}
+TH {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
 TD {border-width: 1px; padding: 3px; border-style: solid; border-color: black;}
 </style>
 "@
 
-        $formattedBlobs = $blobs | ConvertTo-Html -Property Name,SizeInGB,Resource_Group,Location,Tier,Created,Last_Modified,URI -Head $Header
+        $formattedBlobs = $blobs | 
+            ConvertTo-Html -Property Name,Container_Name,Storage_Account,SizeInGB,Resource_Group,Location,Tier,Created,Last_Modified -Head $Header
 
         # Details for Message
         $date = (Get-Date).ToShortDateString() -replace "/", "-"
@@ -269,7 +272,7 @@ $blobs = Get-AzBlobs -storageAccountName $storageAccountName -resourceGroupName 
 # Checking each blob to see if it eligable for deletion
 
 Foreach ($blob in $blobs) {
-    if ($blob.Created -lt $maximumDate) {        
+    if ($blob.created -lt $maximumDate) {        
         # Blobs are older then defined age so eligable to be deleted 
         $blobsEligableForDeletion = [Array]$blobsEligableForDeletion + $blob
     }
