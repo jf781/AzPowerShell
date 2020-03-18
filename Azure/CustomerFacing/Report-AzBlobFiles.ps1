@@ -52,9 +52,9 @@ Param(
     [string]$maximumAge,
     [Parameter(
         Mandatory = $true,
-        HelpMessage = "Define the receipient of the message"
+        HelpMessage = "Define the recipient of the message"
     )]
-    [String]$receipient
+    [String]$recipient
 )
 
 ######################################################
@@ -127,7 +127,7 @@ function Get-AzBlobs {
 
                                 $unmngDiskProps = [ordered]@{
                                     Name           = $blobName
-                                    Size           = $blobSize
+                                    SizeInGB       = $blobSize
                                     Resource_Group = $blobRgName
                                     Location       = $blobLocation
                                     URI            = $blobUri
@@ -286,9 +286,9 @@ function Send-SendGridEmail {
         [string]$API,
         [Parameter(
             mandatory = $true,
-            HelpMessage = "This is the list of recepients that will be receiving the email."
+            HelpMessage = "This is the list of recipients that will be receiving the email."
         )]
-        [string]$Recepients,
+        [string]$Recipients,
         [Parameter(
             mandatory = $true,
             HelpMessage = "Please provide the Blob Objects to pass along"
@@ -325,7 +325,7 @@ function Send-SendGridEmail {
                 {
                     "to":[
                         {
-                            "email": $Recepients,
+                            "email": $Recipients,
                         }
                     ],
                     "subject":"$Subject",
@@ -415,11 +415,11 @@ $SendGridAPI = Get-AzKeyVaultSecret -VaultName $keyVaultName -Name $apiSecretNam
 
 # Sending email reports on blobs.  Seperate emails are sent depending on if they 
 If ($blobsEligableForDeletion){
-    Send-SendGridEmail -Recepients $recipient -api $SendGridAPI -blobs $blobsEligableForDeletion -ElegiableForDeletion $true
+    Send-SendGridEmail -Recipients $recipient -api $SendGridAPI -blobs $blobsEligableForDeletion -ElegiableForDeletion $true
 }
 
 If ($blobsToReport){
-    Send-SendGridEmail -Recepients $recepient -api $SendGridAPI -blobs $blobsToReport -ElegiableForDeletion $false
+    Send-SendGridEmail -Recipients $recipient -api $SendGridAPI -blobs $blobsToReport -ElegiableForDeletion $false
 }
 
 write-output $blobsEligableForDeletion
