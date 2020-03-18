@@ -36,7 +36,7 @@ Param(
     )]
     [string]$APISecretName,
     [Parameter(
-        Mandatory = $false,
+        Mandatory = $true,
         HelpMessage = "Name of file Extension to search for"
     )]
     [string]$fileExtention,
