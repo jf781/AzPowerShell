@@ -31,7 +31,7 @@ function Get-AzTagDetails{
                 switch ($subID)
                 {
                     6d82e6fd-345f-4df1-87e5-365c3f5df266 {
-                        $subName = "Microsofr Project"
+                        $subName = "Microsoft Project"
                     }
                     35f2466b-fa56-421c-982f-665e82a087a7 {
                         $subName = "GLB-NA01-Prod"
@@ -57,7 +57,7 @@ function Get-AzTagDetails{
                 }
 
                 $props = [ordered]@{
-                    Subscritpion    = $subName
+                    Subscription    = $subName
                     Keys            = $key
                     Value           = $tagValue
                     Count           = $valueCount
