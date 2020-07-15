@@ -308,7 +308,7 @@ function Get-AzRbacPermissions {
             try {
 
                 Write-Verbose "Logging roles for Subscription assignments"
-                $azSubRoles = Get-AzRoleAssignment -Scope "$azSubScope" -ErrorAction Stop
+                $azSubRoles = Get-AzRoleAssignment -Scope "$azSubScope" -ErrorAction Stop | Where-Object -Property Scope -EQ $azSubScope
         
                 Foreach ($azSubRole in $azSubRoles) {
 
