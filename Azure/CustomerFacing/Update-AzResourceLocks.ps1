@@ -1,13 +1,15 @@
-function Update-AzVnetNSGResourceLocks {
+function Update-AzResourceLocks {
   
     <#
 
   .SYNOPSIS
-  This funtion will help you document and create resource locks in place for Virtual Networks and Network security groups.
+  This funtion will help you document and create resource locks in place.  
 
 
   .DESCRIPTION
-  If you run the script with only specifying the required parameter, "OutputPath", it will document the current resource locks for all Vnets and NSGs in scope. 
+  If you pass one or more resource to the script via the pipline it will document the currently resource locks or create a new lock depending on the parameters.  
+
+  If you run the script with only specifying the required parameter, "OutputPath", it will document the current resource locks for resources provided.  
 
   You can have it create a resource lock across all Vnets and NSG by populating the "LockName", "LockType", and "CreateLock" parameters. 
 
@@ -24,18 +26,21 @@ function Update-AzVnetNSGResourceLocks {
   .PARAMETER CreateLock
   This is a boolean value to determine if you want to create locks.  It defaults to "False"
 
+  .PARAMETER Resources
+  These are the resources that are passed along via the pipeline or via the parameter.  
+
   .EXAMPLE
-  Update-AzVnetNSGResourceLocks -OutputPath ~/Desktop
+  Get-AzResourceGroup | Update-AzResourceLocks -OutputPath ~/Desktop
   
   This will document all existing resource locks and save the output as a CSV file to the current users Desktop
 
   .EXAMPLE
-  Update-AzVnetNSGResourceLocks -LockName "SampleDeleteLockName"  -LockType "DoNotDelte" -CreateLock $True -OutputPath ~/Desktop
+  Get-AzResourceGroup | Update-AzResourceLocks -LockName "SampleDeleteLockName"  -LockType "DoNotDelte" -CreateLock $True -OutputPath ~/Desktop
 
-  This will create a lock for all NSG and VNets that will prevent them from being deleted.  The lock will be named "SampleDeleteLockName"
+  This will create a lock for all resource groups that will prevent them from being deleted.  The lock will be named "SampleDeleteLockName"
   It will output the value of all existing and new locks to the desktop of the current user.
 
-  Any locks on the Vnet and NSGs that had a lock type of "DoNotDelete" will be removed so there is only the one lock with a level of "DoNotDelete".  Locks with a level of "ReadOnly" will not be modified
+  Any locks on the resource groups that had a lock type of "DoNotDelete" will be removed so there is only the one lock with a level of "DoNotDelete".  Locks with a level of "ReadOnly" will not be modified
 
   .LINK
   https://www.thinkahead.com
@@ -44,19 +49,28 @@ function Update-AzVnetNSGResourceLocks {
 
   [CmdletBinding()]
   Param(
-    [Parameter(Mandatory = $false)]
+    [Parameter(
+      Mandatory = $true,
+      ValueFromPipeline = $true)]
+    [object[]]
+    $resources,
+    [Parameter(
+      Mandatory = $false)]
     [string]
-    $LockName = "null",
-    [Parameter(Mandatory = $false)]
+    $lockName = "null",
+    [Parameter(
+      Mandatory = $false)]
     [ValidateSet('CanNotDelete','ReadOnly', 'null')]
     [string]
-    $LockType = "null",
-    [Parameter(Mandatory = $false)]
+    $lockType = "null",
+    [Parameter(
+      Mandatory = $false)]
     [bool]
-    $CreateLock = $false,
-    [Parameter(Mandatory = $true)]
+    $createLock = $false,
+    [Parameter(
+      Mandatory = $true)]
     [string]
-    $OutputPath
+    $outputPath
   )
 
   process{
@@ -104,37 +118,55 @@ function Update-AzVnetNSGResourceLocks {
     Function Get-AzLocks {
       [CmdletBinding()]
       param (
-        [Parameter(mandatory = $true
+        [Parameter(
+          mandatory = $true
         )]
         [bool]
         $CreateLock,
-        [Parameter(mandatory = $false
+        [Parameter(
+          mandatory = $false
         )]
         [string]
         $LockType = "null",
-        [Parameter(mandatory = $false
+        [Parameter(
+          mandatory = $false
         )]
         [string]
         $LockName = "null",
-        [Parameter(mandatory = $true
+        [Parameter(
+          mandatory = $false
         )]
         [string]
         $resourceName,
-        [Parameter(mandatory = $true
+        [Parameter(
+          mandatory = $false
         )]
         [string]
         $ResourceGroupName,
-        [Parameter(mandatory = $true
+        [Parameter(
+          mandatory = $false
         )]
         [string]
-        $ResourceType
+        $ResourceType,
+        [Parameter(
+          mandatory = $true
+        )]
+        [bool]
+        $resourceGroup
       )
       process {
         try{
-          Write-Verbose "Checking Locks on Name: $ResourceName, RG: $ResourceGroupName, Type: $ResourceType"
-          $lock = Get-AzResourceLock -ResourceName $ResourceName -resourceGroupName $ResourceGroupName -ResourceType $ResourceType -ErrorAction SilentlyContinue
+          Write-Verbose "Getting existing locks on Name: $ResourceName, RG: $ResourceGroupName, Type: $ResourceType"
+          if ($resourceGroup) {
+            Write-Verbose "In If, Resource is a resource group"
+            $lock = Get-AzResourceLock -resourceGroupName $ResourceGroupName -ErrorAction SilentlyContinue | ? { $_.resourceType -eq "Microsoft.Authorization/locks"}
+          }
+          else{
+            Write-Verbose "In Else, Resource is NOT a resource group"
+            $lock = Get-AzResourceLock -ResourceName $ResourceName -resourceGroupName $ResourceGroupName -ResourceType $ResourceType -ErrorAction SilentlyContinue
+          }
           if (($lock.Properties.level -eq $LockType) -and ($lock.Name -eq $LockName)) {
-            Write-Verbose "Found lock for $resourceName"
+            Write-Verbose "Found lock for $resourceName in $ResourceGroupName"
           }
           else {
             Write-Verbose "In Else. Lock with existing name not found"
@@ -146,24 +178,40 @@ function Update-AzVnetNSGResourceLocks {
                 foreach($oldLock in $oldLocks){
                   $oldLockName = $oldLock.Name
                   Write-Verbose "Removing lock $oldLockName from $ResourceName"
-                  Remove-AzResourceLock -Name "$oldLockName" -ResourceName $ResourceName -ResourceGroupName $ResourceGroupName -ResourceType $ResourceType -Force
+                  if ($resourceGroup) {
+                    Write-Verbose "In If, Removing $oldLockName from $ResourceGroupName"
+                    Remove-AzResourceLock -Name "$oldLockName" -ResourceGroupName $ResourceGroupName -Force
+                  }else{
+                    Write-Verbose "In else, Removing $oldLockName from $ResourceName"
+                    Remove-AzResourceLock -Name "$oldLockName" -ResourceName $ResourceName -ResourceGroupName $ResourceGroupName -ResourceType $ResourceType -Force
+                  }
                 }
               }
               else {
                 Write-Verbose "There is not an existing lock type that has the same lock level that is being created"
               }
-              Write-Host "Setting Lock $LockName on $ResourceName, ResourceType = $ResourceType" -ForegroundColor Green
-              $lock = Set-AzResourceLock -LockName $LockName -LockLevel $LockType -ResourceName $ResourceName -ResourceGroupName $ResourceGroupName -ResourceType $ResourceType -Force
+              if($resourceGroup){
+                Write-Host "Setting Lock $LockName on $ResourceGroupName" -ForegroundColor Green
+                $lock = Set-AzResourceLock -LockName $LockName -LockLevel $LockType -ResourceGroupName $ResourceGroupName -Force
+              }else{
+                Write-Host "Setting Lock $LockName on $ResourceName, ResourceType = $ResourceType" -ForegroundColor Green
+                $lock = Set-AzResourceLock -LockName $LockName -LockLevel $LockType -ResourceName $ResourceName -ResourceGroupName $ResourceGroupName -ResourceType $ResourceType -Force
+              }
             }else{
-              write-Verbose "In Else.  CreateLock set to false"
+              write-Verbose "In Else. CreateLock set to false"
             }
           }
-          return $lock
+          if($lock){
+            Write-Verbose "Returning Lock"
+            return $lock
+          }else{
+            Write-Verbose "No locks to return"
+          }
         }
         catch{                    
           Write-Verbose "Error getting lock on $ResourceName."
           Write-Host "Error getting lock on $ResourceName."
-          Write-Verbose "Error Msg: $_"
+          Write-Verbose "Error Msg: $_."
           break
         }
       }
@@ -260,34 +308,34 @@ function Update-AzVnetNSGResourceLocks {
       Write-Verbose "Output path is valid"
 
       try{
-        $nsgs = Get-AzNetworkSecurityGroup
-        foreach ($nsg in $nsgs){
-          $nsgOutput = Get-AzLocks -ResourceName $nsg.Name -ResourceGroupName $nsg.ResourceGroupName -LockType $LockType -LockName $LockName -CreateLock $CreateLock -ResourceType "Microsoft.Network/networkSecurityGroups"
-          $output += $nsgOutput
+        foreach ($resource in $resources){
+          Write-Verbose "In foreach loop with resource: $resource"
+          $resourceDetails = $resource | Get-AzResource -ErrorAction silentlycontinue
+          
+          If ($resourceDetails.ResourceId){
+            Write-Verbose " In If loop with $resource.  It is not a resouce group"
+            $resourceType = $resourceDetails.ResourceType
+            $resourceName = $resourceDetails.Name
+            $resourceOutput = Get-AzLocks -ResourceName $resourceName -ResourceGroupName $resource.ResourceGroupName -LockType $lockType -LockName $lockName -CreateLock $createLock -ResourceType $resourceType -resourceGroup $false
+          }Else{
+            $resourceName = $resource.ResourceGroupName
+            Write-Verbose "In Else loop with $resourceName. It is a resouce group"
+            $resourceOutput = Get-AzLocks -ResourceGroupName $resourceName -LockType $lockType -LockName $lockName -CreateLock $createLock -resourceGroup $true
+          }
+          
+          
+          $output += $resourceOutput
         }
       }catch{
-        Write-Verbose "Error checking NSG Locks."
-        Write-Host "Error checking NSG Locks."
-        Write-Verbose "Error Msg: $_"
-        break
-      }
-
-      try{
-        $vnets = Get-AzVirtualNetwork
-        foreach ($vnet in $vnets) {
-          $vnetOutput = Get-AzLocks -ResourceName $vnet.Name -ResourceGroupName $vnet.ResourceGroupName -LockType $LockType -LockName $LockName -CreateLock $CreateLock -ResourceType "Microsoft.Network/virtualNetworks"
-          $output += $vnetOutput
-        }
-      }catch{
-        Write-Verbose "Error checking Vnet Locks."
-        Write-Host "Error checking Vnet Locks."
+        Write-Verbose "Error checking resource Locks."
+        Write-Host "Error checking resource Locks."
         Write-Verbose "Error Msg: $_"
         break
       }
 
       try {
-        $path = $lockOutputPath + "Existing-Vnet-NSG-Locks-" + $date + ".csv"
-        $output | ConvertTo-Csv -NoTypeInformation | Out-File -path $path
+        $path = $lockOutputPath + "Az-Resource-Locks" + $date + ".csv"
+        $output | ConvertTo-Csv -NoTypeInformation | Out-File -FilePath $path
       }catch {
         Write-Verbose "Error writting output."
         Write-Host "Error writting output."
