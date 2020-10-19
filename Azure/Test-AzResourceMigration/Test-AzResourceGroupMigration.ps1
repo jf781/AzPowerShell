@@ -1,3 +1,9 @@
+#####
+# Need to review 
+# 1. Data returned.   Some may not be needed (Resource ID, type, DependencyCount, etc..)
+# 2. How this can be incorporated with the Test-AzResourceMigration.   This is started in Test-AzResourceMigration_WIP.ps1.
+#     - This includes logic so that we will scan a resource group, if it cannot be migrated, then we need run the can against the individual resources within the group
+#### 
 Function Test-AzResourceMigration {
 
   [CmdletBinding()]
