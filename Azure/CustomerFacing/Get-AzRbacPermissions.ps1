@@ -178,11 +178,14 @@ Function Get-AzRBACPermissions {
                     $azSubRoles = Get-AzRoleAssignment -Scope "$azSubScope" -ErrorAction Stop
             
                     Foreach ($azSubRole in $azSubRoles) {
-
-                        $azSubRoleName = $azSubRole.name
-                        Write-Verbose "Logging $azSubRoleName for the root assignments"
+                      $roleScope = $azSubRole.Scope
+                      if($roleScope -eq $azSubScope){
+                        Write-Verbose "Logging $azSubRoleName for the subscription"
                         $azSubRBAC = Export-RBACRoles -role $azSubRole -roleScope $azSubScope -azSubName $azSubName
                         $subRBACRoles += $azSubRBAC
+                      }else{
+                        Write-Verbose "Role is not scoped to subscription"
+                      }
                     }
                 }
                 Catch {
