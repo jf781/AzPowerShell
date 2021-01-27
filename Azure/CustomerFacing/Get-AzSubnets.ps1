@@ -137,7 +137,7 @@ function Get-AzSubnetDetails {
                     $vnetAddressSpace = $vnet.AddressSpace | Select-Object -ExpandProperty AddressPrefixes
 
                     foreach ($subnet in $subnets){
-                        $subnetName             = $subnet.Name | select
+                        $subnetName             = $subnet.Name
                         $subnetAddressPrefix    = $subnet | select-object -ExpandProperty AddressPrefix
                         $subnetDetails          = Get-AzVirtualNetworkUsageList -ResourceGroupName $vnet.ResourceGroupName -Name $vnet.Name | Where-Object {$_.Id -like "*$subnetName*"}
                         $subnetCapacity         = $subnetDetails.Limit
