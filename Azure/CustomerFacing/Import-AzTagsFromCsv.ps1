@@ -130,6 +130,49 @@ function Import-AzTagsFromCsv {
       }
     }
 
+    # Changes the AzContext
+    function Update-AzContext {
+      [CmdLetBinding()]
+      param(
+        [Parameter(
+          Mandatory = $false,
+          ValueFromPipeline = $true
+        )]
+        [string]
+        $SubscriptionId,
+        [Parameter(
+          Mandatory = $false,
+          ValueFromPipeline = $true
+        )]
+        [string]
+        $SubscriptionName
+      )
+      process {
+        if($subscriptionName){
+          $currentSubName = (Get-AzContext).Subscription.Name
+          if($currentSubName -eq $SubscriptionName){
+            Write-Debug "Current Sub: $currentSubName is the same as $SubscriptionName.  Not changing context"
+          }
+          else{
+            Write-debug "Current sub: $currentSubName is not the same as $subscriptionName.  Updating context to new $SubscriptiionName"
+            Set-AzContext -SubscriptionName $SubscriptionName 
+          }
+        }
+        elseif($SubscriptionId){
+          $currentSubId = (Get-AzContext).Subscription.Id
+          if ($currentSubId -eq $SubscriptionId) {
+            Write-Debug "Current Sub: $currentSubId is the same as $SubscriptionId.  Not changing context"
+          }
+          else {
+            Write-debug "Current sub: $currentSubId is not the same as $SubscriptionId.  Updating context to new $SubscriptiionName"
+            Set-AzContext -SubscriptionId $SubscriptionId 
+          }
+        }
+        else{
+          Write-Debug "Neither SubscriptionId or $subscriptionName Defined.  No changes made."
+        }
+      }
+    }
 
     # Module to import CSV File
     function Get-CsvFile {
@@ -275,13 +318,13 @@ function Import-AzTagsFromCsv {
     }
 
     # Defining all variables
-    $Date = (Get-Date).ToShortDateString().Replace("/", "-")
-
     $file = get-csvFile -csvFilePath $filePath
 
     $uniqueResources = Group-ResourceIds -list $file
 
     foreach ($resource in $uniqueResources) {
+      $subId = ($resource).Split("/")[2]
+      Update-AzContext -subscriptionID $subId
       $updatedTags = Group-TagS -resource $resource -list $file
 
       Update-AzTag -ResourceId $resource -Tag $updatedTags -Operation Merge
