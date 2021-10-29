@@ -362,7 +362,7 @@ function Get-AzStorageAccountNetworkACLs {
                 
         #Validate necessary modules are installed
         Write-Verbose "Ensuring the proper PowerShell Modules are installed"
-        $installedModules = Confirm-ModulesInstalled -modules az.network,  ImportExcel
+        $installedModules = Confirm-ModulesInstalled -modules az.storage,  ImportExcel
         $modulesNeeded = $False
 
         foreach ($installedModule in $installedModules) {

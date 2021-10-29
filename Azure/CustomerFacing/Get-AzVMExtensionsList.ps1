@@ -1,33 +1,29 @@
-function Get-AzSubnetDetails {
+function Get-AzVMExtensionsList {
     <#
     .SYNOPSIS
-        This script is designed to export a list of:
-        - Vnets
-        - Subnets
-        - Subnet address prefixes
-        - Subnet IP address capacity,
-        - Connected devices in the subnet.
+        This script is designed to export the extensions installed on the VMs.  
 
     .DESCRIPTION
         This script does not install or make any changes.   It does have the following requirements that if not met, will stop the script from running
         - Running in PowerShell 5.1 or newer context
         - The following modules need to be installed
-            - Az.Network
+            - Az.Compute
             - ImportExcel
         
     .INPUTS
         No input is needed to run the script.  If you are not connected to Azure it will prompt you to login. 
+
     .OUTPUTS
-        It will output an Excel file on the current user's desktop that has a tab for the following Azure resources.  (Excel does not need to be installed on the workstation running the file)
-        - Subnets
+        
+
     .NOTES
         Version:        1.0
         Author:         Joe Fecht - AHEAD, llc.
-        Creation Date:  May 2020
+        Creation Date:  September 2021
         Purpose/Change: Initial deployment
     
     .EXAMPLE
-        Get-AzSubnetDetails
+        Get-AzVMExtensionsList
     #>
     [CmdletBinding()]
     param (
@@ -120,42 +116,34 @@ function Get-AzSubnetDetails {
         }
 
         #----------------------------------------------------------------------------------------
-        # Module to get subnets from Subscription
+        # Module to get the extensions associated with the VMs
         #----------------------------------------------------------------------------------------
-
-        Function Get-AzSubnets {
-            [CmdletBinding()]
-            param(
+        
+        function Get-AzVMExtensions {
+            [CmdLetBinding()]
+            param (
+                [Parameter(
+                    Mandatory = $true,
+                    ValueFromPipeline = $true
+                )]
+                [object]
+                $vm
             )
-            process{
-                $Vnets = Get-AzVirtualNetwork
+            PROCESS {
                 $subName = (Get-AzContext | Select-Object -ExpandProperty Name).Split('(')[0]
-
-                foreach ($Vnet in $Vnets){
-                    $subnets = $Vnet.subnets
-                    $vnetName = $vnet.Name
-                    $vnetAddressSpace = $vnet.AddressSpace | Select-Object -ExpandProperty AddressPrefixes
-
-                    foreach ($subnet in $subnets){
-                        $subnetName             = $subnet.Name
-                        $subnetAddressPrefix    = $subnet | select-object -ExpandProperty AddressPrefix
-                        $subnetDetails          = Get-AzVirtualNetworkUsageList -ResourceGroupName $vnet.ResourceGroupName -Name $vnet.Name | Where-Object {$_.Id -like "*$subnetName*"}
-                        $subnetCapacity         = $subnetDetails.Limit
-                        $subnetConnectedDevices = $subnetDetails.CurrentValue
-
-                        $props = [ordered]@{
-                            Subscription            = $subName
-                            Vnet                    = $vnetName
-                            VnetAddressSpace        = $vnetAddressSpace
-                            SubnetName              = $subnetName
-                            SubnetAddressPrefix     = $subnetAddressPrefix
-                            SubnetCapacity          = $subnetCapacity
-                            SubnetDevices           = $subnetConnectedDevices
-                        }
-
-                        New-Object -TypeName psobject -Property $props
-
+                $vmName = $vm.name
+                $extensions = Get-AzVMExtension -VMName $vm.name -ResourceGroupName $vm.resourceGroupName
+                foreach ($ext in $extensions){ 
+                    $props = [ordered]@{
+                        Subscription            = $subName
+                        VMName                  = $vmName
+                        RGName                  = $vm.ResourceGroupName
+                        ExtentsionName          = $ext.Name
+                        Publisher               = $ext.Publisher
+                        State                   = $ext.ProvisioningState
                     }
+                
+                    New-Object -TypeName psobject -Property $props
                 }
             }
         }
@@ -295,7 +283,7 @@ function Get-AzSubnetDetails {
                 
         #Validate necessary modules are installed
         Write-Verbose "Ensuring the proper PowerShell Modules are installed"
-        $installedModules = Confirm-ModulesInstalled -modules az.network,  ImportExcel
+        $installedModules = Confirm-ModulesInstalled -modules az.compute,  ImportExcel
         $modulesNeeded = $False
 
         foreach ($installedModule in $installedModules) {
@@ -319,8 +307,8 @@ function Get-AzSubnetDetails {
         }
 
         # Defining all variables
-        $Date = (Get-Date).ToShortDateString().Replace("/", "-")
-        $subnets = @()
+        $date = (Get-Date).ToShortDateString().Replace("/", "-")
+        $extensions = @()
         $selectedAzSubs = @()
 
         #Gathering and determine which subs to run against. 
@@ -342,15 +330,16 @@ function Get-AzSubnetDetails {
             $selectedAzSubs += $sub
         }
                 
-        ## Finding Subnets in each sub
+        ## Gathering security score in each sub
         foreach ($azSub in $selectedAzSubs) {
-            $outNull = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | Select-Object -ExpandProperty name
+            $null = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | Select-Object -ExpandProperty name
             $azSubName = $azSub.subName
-            Write-Host "Checking for subnets resources in sub: $azSubName" -ForegroundColor green
-            $subscriptionSubnets = Get-AzSubnets
-
-            $subnets += $subscriptionSubnets
-
+            Write-Host "Getting VM Extensions in sub: $azSubName" -ForegroundColor green
+            $vms = get-azvm
+            foreach($vm in $vms){
+                $vmExtensions = Get-AzVMExtensions -vm $vm
+                $extensions += $vmExtensions
+            }
         }
 
         $excelPath = Get-DesktopPath -date $date
@@ -361,11 +350,8 @@ function Get-AzSubnetDetails {
         }
 
         #Outputing Excel File to current users desktop
-        $subnets | Export-Excel -Path $excelPath -WorksheetName "Subnets"
-
+        $extensions | Export-Excel -Path $excelPath -WorksheetName "VM-Extensions"
 
     }
 
 }
-
-Get-AzSubnetDetails

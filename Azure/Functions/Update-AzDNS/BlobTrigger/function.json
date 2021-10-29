@@ -1,0 +1,11 @@
+{
+  "bindings": [
+    {
+      "name": "InputBlob",
+      "type": "blobTrigger",
+      "direction": "in",
+      "path": "prrivate-dns-records/dns.csv",
+      "connection": "jfazfxteststgacct_STORAGE"
+    }
+  ]
+}

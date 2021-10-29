@@ -1,12 +1,7 @@
-function Get-AzSubnetDetails {
+function Get-AzRouteTableList {
     <#
     .SYNOPSIS
-        This script is designed to export a list of:
-        - Vnets
-        - Subnets
-        - Subnet address prefixes
-        - Subnet IP address capacity,
-        - Connected devices in the subnet.
+        This script is designed to export a list of routes within each route table. It will also include all subnets associated with each route table.  
 
     .DESCRIPTION
         This script does not install or make any changes.   It does have the following requirements that if not met, will stop the script from running
@@ -17,17 +12,18 @@ function Get-AzSubnetDetails {
         
     .INPUTS
         No input is needed to run the script.  If you are not connected to Azure it will prompt you to login. 
+
     .OUTPUTS
-        It will output an Excel file on the current user's desktop that has a tab for the following Azure resources.  (Excel does not need to be installed on the workstation running the file)
-        - Subnets
+        
+
     .NOTES
         Version:        1.0
         Author:         Joe Fecht - AHEAD, llc.
-        Creation Date:  May 2020
+        Creation Date:  September 2021
         Purpose/Change: Initial deployment
     
     .EXAMPLE
-        Get-AzSubnetDetails
+        Get-AzRouteTableList
     #>
     [CmdletBinding()]
     param (
@@ -120,42 +116,71 @@ function Get-AzSubnetDetails {
         }
 
         #----------------------------------------------------------------------------------------
-        # Module to get subnets from Subscription
+        # Module to get the routes within the route table
         #----------------------------------------------------------------------------------------
-
-        Function Get-AzSubnets {
-            [CmdletBinding()]
-            param(
+        
+        function Get-AzRouteTableRoutes {
+            [CmdLetBinding()]
+            param (
+                [Parameter(
+                    Mandatory = $true,
+                    ValueFromPipeline = $true
+                )]
+                [object]
+                $udr
             )
-            process{
-                $Vnets = Get-AzVirtualNetwork
+            PROCESS {
                 $subName = (Get-AzContext | Select-Object -ExpandProperty Name).Split('(')[0]
 
-                foreach ($Vnet in $Vnets){
-                    $subnets = $Vnet.subnets
-                    $vnetName = $vnet.Name
-                    $vnetAddressSpace = $vnet.AddressSpace | Select-Object -ExpandProperty AddressPrefixes
-
-                    foreach ($subnet in $subnets){
-                        $subnetName             = $subnet.Name
-                        $subnetAddressPrefix    = $subnet | select-object -ExpandProperty AddressPrefix
-                        $subnetDetails          = Get-AzVirtualNetworkUsageList -ResourceGroupName $vnet.ResourceGroupName -Name $vnet.Name | Where-Object {$_.Id -like "*$subnetName*"}
-                        $subnetCapacity         = $subnetDetails.Limit
-                        $subnetConnectedDevices = $subnetDetails.CurrentValue
-
-                        $props = [ordered]@{
-                            Subscription            = $subName
-                            Vnet                    = $vnetName
-                            VnetAddressSpace        = $vnetAddressSpace
-                            SubnetName              = $subnetName
-                            SubnetAddressPrefix     = $subnetAddressPrefix
-                            SubnetCapacity          = $subnetCapacity
-                            SubnetDevices           = $subnetConnectedDevices
-                        }
-
-                        New-Object -TypeName psobject -Property $props
-
+                foreach($route in $udr.Routes) {
+                    $props = [ordered]@{
+                        Subscription            = $subName
+                        ResourceGroup           = $udr.ResourceGroupName 
+                        RouteTable              = $udr.Name
+                        RouteName               = $route.Name
+                        AddressPrefix           = $route.AddressPrefix
+                        NextHopType             = $route.NextHopType
+                        NextHopAddress          = $route.NextHopIpAddress
                     }
+                
+                    New-Object -TypeName psobject -Property $props
+
+                }
+            }
+        }
+
+        function Get-AzRouteTableAssociation {
+            [CmdLetBinding()]
+            param (
+                [Parameter(
+                    Mandatory = $true,
+                    ValueFromPipeline = $true
+                )]
+                [object]
+                $udr
+            )
+            PROCESS {
+                $subName = (Get-AzContext | Select-Object -ExpandProperty Name).Split('(')[0]
+
+                foreach($subnet in $udr.Subnets) {
+                    $subnetId = ($subnet.id).split("/")
+                    $subnetName = $subnetId[10]
+                    $vnetRg = $subnetId[4]
+                    $vnet = $subnetId[8]
+
+
+                
+                    $props = [ordered]@{
+                        Subscription          = $subName
+                        ResourceGroup         = $udr.ResourceGroupName
+                        RouteTable            = $udr.Name
+                        Subnet                = $subnetName
+                        VNet                  = $vnet
+                        VnetResourceGroup     = $vnetRg
+                    }
+                
+                    New-Object -TypeName psobject -Property $props
+
                 }
             }
         }
@@ -319,8 +344,8 @@ function Get-AzSubnetDetails {
         }
 
         # Defining all variables
-        $Date = (Get-Date).ToShortDateString().Replace("/", "-")
-        $subnets = @()
+        $date = (Get-Date).ToShortDateString().Replace("/", "-")
+        $routes = @()
         $selectedAzSubs = @()
 
         #Gathering and determine which subs to run against. 
@@ -342,15 +367,19 @@ function Get-AzSubnetDetails {
             $selectedAzSubs += $sub
         }
                 
-        ## Finding Subnets in each sub
+        ## Gathering security score in each sub
         foreach ($azSub in $selectedAzSubs) {
-            $outNull = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | Select-Object -ExpandProperty name
+            $null = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | Select-Object -ExpandProperty name
             $azSubName = $azSub.subName
-            Write-Host "Checking for subnets resources in sub: $azSubName" -ForegroundColor green
-            $subscriptionSubnets = Get-AzSubnets
+            Write-Host "Getting Route Tables in sub: $azSubName" -ForegroundColor green
+            $udrs = Get-AzRouteTable
+            foreach($udr in $udrs){
+                $tableRoutes = Get-AzRouteTableRoutes -udr $udr
+                $routes += $tableRoutes
 
-            $subnets += $subscriptionSubnets
-
+                $tableAssociations = Get-AzRouteTableAssociation -udr $udr
+                $routeAssociations += $tableAssociations
+            }
         }
 
         $excelPath = Get-DesktopPath -date $date
@@ -361,11 +390,9 @@ function Get-AzSubnetDetails {
         }
 
         #Outputing Excel File to current users desktop
-        $subnets | Export-Excel -Path $excelPath -WorksheetName "Subnets"
-
+        $routes | Export-Excel -Path $excelPath -WorksheetName "Routes"
+        $routeAssociations | Export-Excel -Path $excelPath -WorksheetName "Associations"
 
     }
 
 }
-
-Get-AzSubnetDetails
