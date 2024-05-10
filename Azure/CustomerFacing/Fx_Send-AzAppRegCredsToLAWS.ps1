@@ -18,6 +18,11 @@ param($Timer)
 # Write-Host "PowerShell timer trigger function ran! TIME: $currentUTCtime"
 
 # Create two records with the same set of properties to create
+
+$vaultName = "vaultName"
+$workspaceIdSecret = "workspaceId"
+$workspaceKeySecret = "workspaceSharedKey"
+
 Function Get-AppRegistrationWithCredentials {
     $apps = Get-AzADApplication
     if($null -eq $apps){
@@ -114,8 +119,8 @@ Function Get-AppRegistrationWithCredentials {
     return $value
   }
   
-  $workspaceId = Get-VaultSecret -secretName "workspaceId" -vaultName "dfin-demo-vault-001"
-  $workspaceKey = Get-VaultSecret -secretName "workspaceSharedKey" -vaultName "dfin-demo-vault-001"
+  $workspaceId = Get-VaultSecret -secretName $workspaceIdSecret -vaultName $vaultName
+  $workspaceKey = Get-VaultSecret -secretName $workspaceKeySecret -vaultName $vaultName
   
   $logType = "AppRegistrationsCreds"
   $timeStampField = ""
