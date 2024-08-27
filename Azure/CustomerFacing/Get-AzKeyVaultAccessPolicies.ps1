@@ -127,100 +127,184 @@ function Get-AzKeyVaultAccessPolicies {
                     ValueFromPipeline = $true
                 )]
                 [string]
-                $vaultName,
-                [Parameter(
-                    Mandatory = $true,
-                    ValueFromPipeline = $true
-                )]
-                [string]
-                $resourceGroupName
+                $vaultName
             )
             PROCESS {
                 try {
                     $subName = (Get-AzContext | Select-Object -ExpandProperty Name).Split('(')[0]
-                    $kv = Get-AzKeyVault -Name $vaultName -ResourceGroupName $resourceGroupName
+                    $kv = Get-AzKeyVault -VaultName $vaultName
+                    $vaultName = $kv.VaultName
                 }catch{
                     Write-Verbose "In Catch block.  Error occurred determining Getting Vault $vaultName"
-                    Write-Host "Error determining PowerShell version" -ForegroundColor Red
+                    Write-Host "In Catch block.  Error occurred determining Getting Vault $vaultName" -ForegroundColor Red
                     Write-Host "Error Msg: $_" -ForegroundColor Red
                     break
                 }
         
-                $vaultName = $kv.VaultName
+                $count = 1
+
+                if ($kv.NetworkAcls.DefaultAction -eq "Allow"){
+                    $publicAccessRestrictured = "FALSE"
+                } else {
+                    $publicAccessRestrictured = "TRUE"
+                }
+
+                if ($kv.EnablePurgeProtection){
+                    $purgeProtectionEnabled = "TRUE"
+                } else {
+                    $purgeProtectionEnabled = "FALSE"
+                }
+
+
                 
-                if($kv.EnableRbacAuthorization){
-                    Write-Debug "Determined Vault $vaultName is using RBAC authorization"
-        
-                    $rolesAssigned = Get-AzRoleAssignment -scope $kv.ResourceId | Where-Object -Property RoleDefinitionName -Like "*Key Vault*"
-        
-                    foreach ($assignment in $rolesAssigned){
-        
-                        if($assignment.Scope -eq $kv.ResourceId){
-                            $roleAssignment = "Directly Assigned"
-                        }else{
-                            $roleAssignment = $assignment.Scope
+                if($kv){
+                    if($kv.EnableRbacAuthorization){
+                        Write-Debug "Determined Vault $vaultName is using RBAC authorization"
+            
+                        $rolesAssigned = Get-AzRoleAssignment -scope $kv.ResourceId | Where-Object -Property RoleDefinitionName -Like "*Key Vault*"
+            
+                        foreach ($assignment in $rolesAssigned){
+            
+                            if($assignment.Scope -eq $kv.ResourceId){
+                                $roleAssignment = "Directly Assigned"
+                            }else{
+                                $roleAssignment = $assignment.Scope
+                            }
+            
+                            $objectName = $assignment.DisplayName
+                            $objectId = $assignment.objectId
+                            $type = $assignment.ObjectType
+                            $role = $assignment.RoleDefinitionName
+
+                            if($count -eq "1"){
+                                $firstEntry = "TRUE"
+                            } else {
+                                $firstEntry = "FALSE"
+                            }
+            
+            
+                            $props = [ordered]@{
+                                Subscription                = $subName
+                                VaultName                   = $vaultName
+                                FirstKeyVaultEntry          = $firstEntry
+                                PublicAccessRestrictured    = $publicAccessRestrictured
+                                PurgeProtectionEnabled      = $purgeProtectionEnabled
+                                RBAC                        = "TRUE"
+                                ObjectName                  = $objectName
+                                ObjectType                  = $type
+                                ObjectId                    = $objectId
+                                RoleAssigned                = $role
+                                KeyPermissions              = "n/a"
+                                SecretPermissions           = "n/a"
+                                CertificatePermisssions     = "n/a"
+                                StorageAcctPermissions      = "n/a"
+                                RoleScope                   = $roleAssignment
+                            }
+                        
+                            New-Object -TypeName psobject -Property $props
+
+                            $count ++
                         }
-        
-                        $objectName = $assignment.DisplayName
-                        $objectId = $assignment.objectId
-                        $type = $assignment.ObjectType
-                        $role = $assignment.RoleDefinitionName
-        
+            
+                    }elseif($kv.AccessPolicies){
+                        Write-Debug "Determined Vault $vaultName is using Access Policies to manage access."
+                        
+                        $policies = $kv.AccessPolicies
+                        
+                        foreach ($policy in $policies){
+
+                            try {        
+                                if(($policy.DisplayName).split(' (')[1]){
+                                    $type = "User/Service Principal"
+                                }else{
+                                    $type = "Group"
+                                }
+                            } catch {
+                                $type = "Unknown object"
+                                continue
+                            }
+
+                            if($count -eq "1"){
+                                $firstEntry = "TRUE"
+                            } else {
+                                $firstEntry = "FALSE"
+                            }
+                            
+                            try {
+                                $objectName = ($policy.DisplayName).split(' (')[0]
+                            } catch {
+                                $objectName = "Unknown"
+                                continue
+                            }
+
+                            $objectId = $policy.ObjectId
+                            $keyPerms = $policy.PermissionsToKeysStr
+                            $secretPerms = $policy.PermissionsToSecretsStr
+                            $certPerms = $policy.PermissionsToCertificatesStr
+                            $stgAcctPerms = $policy.PermissionsToStorageStr
+            
+                            $props = [ordered]@{
+                                Subscription                = $subName
+                                VaultName                   = $vaultName
+                                FirstKeyVaultEntry          = $firstEntry
+                                PublicAccessRestrictured    = $publicAccessRestrictured
+                                RBAC                        = "FALSE"
+                                ObjectName                  = $objectName
+                                ObjectType                  = $type
+                                ObjectId                    = $objectId
+                                RoleAssigned                = "n/a"
+                                KeyPermissions              = $keyPerms
+                                SecretPermissions           = $secretPerms
+                                CertificatePermisssions     = $certPerms
+                                StorageAcctPermissions      = $stgAcctPerms
+                                RoleScope                   = "Direct"
+                            }
+                        
+                            New-Object -TypeName psobject -Property $props
+
+                            $count ++
+                        }
+                    }else{
                         $props = [ordered]@{
                             Subscription                = $subName
                             VaultName                   = $vaultName
-                            RBAC                        = "True"
-                            ObjectName                  = $objectName
+                            FirstKeyVaultEntry          = "TRUE"
+                            PublicAccessRestrictured    = $publicAccessRestrictured
+                            PurgeProtectionEnabled      = $purgeProtectionEnabled
+                            RBAC                        = "FALSE"
+                            ObjectName                  = "n/a"
                             ObjectType                  = $type
-                            ObjectId                    = $objectId
-                            RoleAssigned                = $role
+                            ObjectId                    = "n/a"
+                            RoleAssigned                = "n/a"
                             KeyPermissions              = "n/a"
                             SecretPermissions           = "n/a"
                             CertificatePermisssions     = "n/a"
                             StorageAcctPermissions      = "n/a"
-                            RoleScope                   = $roleAssignment
-                          }
-                      
-                        New-Object -TypeName psobject -Property $props
-                    }
-        
-                }else{
-                    Write-Debug "Determined Vault $vaultName is using Access Policies to manage access."
-                    
-                    $policies = $kv.AccessPolicies
-                    
-                    foreach ($policy in $policies){
-        
-                        if(($policy.DisplayName).split(' (')[1]){
-                            $type = "User/Service Principal"
-                        }else{
-                            $type = "Group"
+                            RoleScope                   = "No access policies or RBAC permissions assigned to vault"
                         }
-        
-                        $objectName = ($policy.DisplayName).split(' (')[0]
-                        $objectId = $policy.ObjectId
-                        $keyPerms = $policy.PermissionsToKeysStr
-                        $secretPerms = $policy.PermissionsToSecretsStr
-                        $certPerms = $policy.PermissionsToCertificatesStr
-                        $stgAcctPerms = $policy.PermissionsToStorageStr
-        
-                        $props = [ordered]@{
-                            Subscription                = $subName
-                            VaultName                   = $vaultName
-                            RBAC                        = "False"
-                            ObjectName                  = $objectName
-                            ObjectType                  = $type
-                            ObjectId                    = $objectId
-                            RoleAssigned                = "n/a"
-                            KeyPermissions              = $keyPerms
-                            SecretPermissions           = $secretPerms
-                            CertificatePermisssions     = $certPerms
-                            StorageAcctPermissions      = $stgAcctPerms
-                            RoleScope                   = "Direct"  
-                          }
-                      
+                    
                         New-Object -TypeName psobject -Property $props
                     }
+                }else{
+                    $props = [ordered]@{
+                        Subscription                = $subName
+                        VaultName                   = $vaultName
+                        FirstKeyVaultEntry          = "n/a"
+                        PublicAccessRestrictured    = "n/a"
+                        PurgeProtectionEnabled      = "n/a"
+                        RBAC                        = "n/a"
+                        ObjectName                  = "n/a"
+                        ObjectType                  = "n/a"
+                        ObjectId                    = "n/a"
+                        RoleAssigned                = "n/a"
+                        KeyPermissions              = "n/a"
+                        SecretPermissions           = "n/a"
+                        CertificatePermisssions     = "n/a"
+                        StorageAcctPermissions      = "n/a"
+                        RoleScope                   = "No data returned when querying key vault"
+                    }
+                
+                    New-Object -TypeName psobject -Property $props
                 }
             }
         }
@@ -236,18 +320,26 @@ function Get-AzKeyVaultAccessPolicies {
                     ValueFromPipeline = $true
                 )]
                 [string]
-                $date
+                $date,
+                [Parameter(
+                    ValueFromPipeline = $true
+                )]
+                [string]
+                $workbookName
+
             )
 
             process { 
+
+                $worksheet = $workbookName + "-" + $date + ".xlsx"
                 If ($env:HOME) {
                     Write-Verbose "Running on a non Windows computer.  Saving file to /users/%USERNAME%/Desktop"
-                    $path = "$env:HOME/Desktop/AzResources-$date.xlsx"
+                    $path = "$env:HOME/Desktop/$worksheet"
                     $desktopPath = "$env:HOME/Desktop"
                 }
                 elseif($env:HOMEPATH) {
                     Write-Verbose "Running a Windows PC. Saving file to C:\users\%USERNAME%\Desktop"
-                    $path = "$env:HOMEPATH\Desktop\AzResources-$date.xlsx"
+                    $path = "$env:HOMEPATH\Desktop\$worksheet"
                     $desktopPath = "$env:HOMEPATH\Desktop\"
                 }
 
@@ -259,10 +351,10 @@ function Get-AzKeyVaultAccessPolicies {
                     $folderPath = Get-Location | Select-Object -ExpandProperty Path
                     if($env:HOME){
                         Write-Verbose "Running on a non Windows computer."
-                        $path = $folderPath + "/AzResources-$date.xlsx"
+                        $path = $folderPath + "/$worksheet"
                     }else{
                         Write-Verbose "Running on a Windows computer."
-                        $path = $folderPath + "\AzResources-$date.xlsx"
+                        $path = $folderPath + "\$worksheet"
                     }
                 }
 
@@ -386,7 +478,8 @@ function Get-AzKeyVaultAccessPolicies {
 
         # Defining all variables
         $date = (Get-Date).ToShortDateString().Replace("/", "-")
-        $accessPolicies = @()
+        # $accessPolicies = @()
+        $accessPolicies = [System.Collections.ArrayList]::new()
         $selectedAzSubs = @()
 
         #Gathering and determine which subs to run against. 
@@ -415,12 +508,13 @@ function Get-AzKeyVaultAccessPolicies {
             Write-Host "Getting key vaults in sub: $azSubName" -ForegroundColor green
             $keyVaults = Get-AzKeyVault
             foreach($vault in $keyVaults){
-                $vaultAccessPolicies = Get-AzKeyVaultPolicies -vaultName $vault.VaultName -resourceGroupName $vault.ResourceGroupName
-                $accessPolicies += $vaultAccessPolicies
+                $vaultAccessPolicies = Get-AzKeyVaultPolicies -vaultName $vault.VaultName
+                # $accessPolicies += $vaultAccessPolicies
+                $accessPolicies.Add($vaultAccessPolicies) | Out-Null
             }
         }
 
-        $excelPath = Get-DesktopPath -date $date
+        $excelPath = Get-DesktopPath -date $date -workbookName "KeyVaultAccessPolicies"
 
         ## Remove existing resource report
         If (Test-Path $excelPath) {

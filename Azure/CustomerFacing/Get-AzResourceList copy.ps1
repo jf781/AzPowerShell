@@ -1,13 +1,13 @@
-function Get-AzStorageAccountNetworkACLs {
+function Get-AzResourceList {
     <#
     .SYNOPSIS
-        This script is designed to export the network ACLs of Storage Accounts
+        This script is will return a list of resources within one or more Azure subscriptions
 
     .DESCRIPTION
         This script does not install or make any changes.   It does have the following requirements that if not met, will stop the script from running
         - Running in PowerShell 5.1 or newer context
         - The following modules need to be installed
-            - Az.Storage
+            - Az.*
             - ImportExcel
         
     .INPUTS
@@ -19,11 +19,11 @@ function Get-AzStorageAccountNetworkACLs {
     .NOTES
         Version:        1.0
         Author:         Joe Fecht - AHEAD, llc.
-        Creation Date:  August 2021
+        Creation Date:  February 2022
         Purpose/Change: Initial deployment
     
     .EXAMPLE
-        Get-AzStorageAccountNetworkACLs
+        Get-AzResourceList 
     #>
     [CmdletBinding()]
     param (
@@ -116,18 +116,12 @@ function Get-AzStorageAccountNetworkACLs {
         }
 
         #----------------------------------------------------------------------------------------
-        # Module to get the storage account network ACLs
+        # Module to get the resources within the resource group
         #----------------------------------------------------------------------------------------
         
-        function Get-AzStorageAccountNetworkACLs {
+        function Get-AzResourcesWithinRG {
             [CmdLetBinding()]
             param (
-                [Parameter(
-                    Mandatory = $true,
-                    ValueFromPipeline = $true
-                )]
-                [string]
-                $accountName,
                 [Parameter(
                     Mandatory = $true,
                     ValueFromPipeline = $true
@@ -138,185 +132,40 @@ function Get-AzStorageAccountNetworkACLs {
             PROCESS {
                 try {
                     $subName = (Get-AzContext | Select-Object -ExpandProperty Name).Split('(')[0]
-                    $stgAcct = Get-AzStorageAccount -Name $accountName -ResourceGroupName $resourceGroupName
+                    $resources = Get-AzResource -ResourceGroupName $resourceGroupName
                 }catch{
-                    Write-Verbose "In Catch block.  Error occurred determining Getting Vault $accountName"
-                    Write-Host "Error determining PowerShell version" -ForegroundColor Red
+                    Write-Verbose "In Catch block.  Error occurred determining resources within $resourceGroupName"
+                    Write-Host " Error occurred determining resources within $resourceGroupName" -ForegroundColor Red
                     Write-Host "Error Msg: $_" -ForegroundColor Red
                     break
                 }
 
-                $count = 1
+                if ($resources -ne $null){
+                    foreach ($resource in $resources){
 
-                if($stgAcct.EnableHttpsTrafficOnly){
-                    $requireHttps = "TRUE"
-                }else{
-                    $requireHttps = "FALSE"
-                }
-
-                if($stgAcct){
-                    if($stgAcct.NetworkRuleSet.DefaultAction -eq "Deny"){
-                        $vnetRules = $stgAcct.NetworkRuleSet.VirtualNetworkRules
-                        $ipRules = $stgAcct.NetworkRuleSet.IpRules
-                        $resourceRules = $stgAcct.NetworkRuleSet.ResourceAccessRules
-            
-                        if($vnetRules){
-
-                            Write-Debug "Vnet Rules configured for $accountName"
-                            foreach ($rule in $vnetRules){
-
-                                if($count -eq "1"){
-                                    $firstEntry = "TRUE"
-                                } else {
-                                    $firstEntry = "FALSE"
-                                }
-
-                                $props = [ordered]@{
-                                    Subscription                = $subName
-                                    StorageAcctName             = $accountName
-                                    FirstStgAcctEntry           = $firstEntry
-                                    MinimumTLSVersion           = $stgAcct.MinimumTlsVersion
-                                    AllowAnonymousAccess        = $stgAcct.AllowBlobPublicAccess
-                                    RequireHTTPS                = $requireHttps
-                                    DefaultAction               = "Deny"
-                                    Vnet                        = $rule.VirtualNetworkResourceId
-                                    IpAddresses                 = ""
-                                    ResourceType                = ""
-                                    ResourceScope               = ""
-                                }
-                                
-                                New-Object -TypeName psobject -Property $props
-
-                                $count ++
-                            }
-                        }
-                        
-                        if($ipRules){
-                            Write-Debug "IP Rules configured for $accountName"
-                            foreach ($rule in $ipRules){
-                                
-                                if($count -eq "1"){
-                                    $firstEntry = "TRUE"
-                                } else {
-                                    $firstEntry = "FALSE"
-                                }
-
-                                $props = [ordered]@{
-                                    Subscription                = $subName
-                                    StorageAcctName             = $accountName
-                                    FirstStgAcctEntry           = $firstEntry
-                                    MinimumTLSVersion           = $stgAcct.MinimumTlsVersion
-                                    AllowAnonymousAccess        = $stgAcct.AllowBlobPublicAccess
-                                    RequireHTTPS                = $requireHttps
-                                    DefaultAction               = "Deny"
-                                    Vnet                        = ""
-                                    IpAddresses                 = $rule.IpAddressorRange
-                                    ResourceType                = ""
-                                    ResourceScope               = ""
-                                    }
-                                
-                                New-Object -TypeName psobject -Property $props
-
-                                $count ++
-                            }
-                        }
-                        
-                        if($resourceRules){
-                            Write-Debug "Resource Rules configured for $accountName"
-                            foreach ($rule in $resourceRules){
-                                $count = ($rule.ResourceId).split('*') | Measure-Object | Select-Object -ExpandProperty count
-            
-                                if($count -eq 4){
-                                    $resourceType = ($rule.ResourceId).split('*')[2]
-                                    $resourceScope = "Tenant"
-                                }else{
-                                    $resourceType = ($rule.ResourceId).split('*')[1]
-                                    $resourceScope = ($rule.ResourceId).split('*')[0]
-                                }
-
-                                if($count -eq "1"){
-                                    $firstEntry = "TRUE"
-                                } else {
-                                    $firstEntry = "FALSE"
-                                }
-            
-                                $props = [ordered]@{
-                                    Subscription                = $subName
-                                    StorageAcctName             = $accountName
-                                    FirstStgAcctEntry           = $firstEntry
-                                    MinimumTLSVersion           = $stgAcct.MinimumTlsVersion
-                                    AllowAnonymousAccess        = $stgAcct.AllowBlobPublicAccess
-                                    RequireHTTPS                = $requireHttps
-                                    DefaultAction               = "Deny"
-                                    Vnet                        = ""
-                                    IpAddresses                 = $rule.IpAddressorRange
-                                    ResourceType                = $resourceType
-                                    ResourceScope               = $resourceScope
-                                    }
-                                
-                                New-Object -TypeName psobject -Property $props
-
-                                $count ++
-                            }
-                        }
-                        
-                        if(!$vnetRules -and !$ipRules -and !$resourceRules){
-                            Write-Debug "No ACL's configured for $accountName"
-                            $props = [ordered]@{
-                                Subscription                = $subName
-                                StorageAcctName             = $accountName
-                                FirstStgAcctEntry           = "TRUE"
-                                MinimumTLSVersion           = $stgAcct.MinimumTlsVersion
-                                AllowAnonymousAccess        = $stgAcct.AllowBlobPublicAccess
-                                RequireHTTPS                = $requireHttps
-                                DefaultAction               = "Deny"
-                                Vnet                        = ""
-                                IpAddresses                 = ""
-                                ResourceType                = ""
-                                ResourceScope               = ""
-                            }
-                            
-                            New-Object -TypeName psobject -Property $props
-                        }
-            
-                    }else{
-                        
-                        Write-Debug "No ACL's configured for $accountName"
                         $props = [ordered]@{
-                            Subscription                = $subName
-                            StorageAcctName             = $accountName
-                            FirstStgAcctEntry           = "TRUE"
-                            MinimumTLSVersion           = $stgAcct.MinimumTlsVersion
-                            AllowAnonymousAccess        = $stgAcct.AllowBlobPublicAccess
-                            RequireHTTPS                = $requireHttps
-                            DefaultAction               = "Allow"
-                            Vnet                        = ""
-                            IpAddresses                 = ""
-                            ResourceType                = ""
-                            ResourceScope               = ""
-
+                            Domain                = $subName
+                            ResourceGroupName           = $resourceGroupName
+                            ResourceName                = $resource.Name
+                            ResourceType                = $resource.ResourceType
+                            Location                    = $resource.Location
                         }
                         
                         New-Object -TypeName psobject -Property $props
+
                     }
                 }else{
+                    $rgLocation = Get-AzResourceGroup -Name $resourceGroupName | Select-Object -ExpandProperty Location
+
                     $props = [ordered]@{
                         Subscription                = $subName
-                        StorageAcctName             = $accountName
-                        FirstStgAcctEntry           = ""
-                        MinimumTLSVersion           = ""
-                        AllowAnonymousAccess        = ""
-                        RequireHTTPS                = ""
-                        DefaultAction               = ""
-                        Vnet                        = ""
-                        IpAddresses                 = ""
-                        ResourceType                = ""
-                        ResourceScope               = "No data returned when querying storage account"
-
+                        ResourceGroupName           = $resourceGroupName
+                        ResourceName                = "Empty resource group"
+                        ResourceType                = "Empty resource group"
+                        Location                    = $rgLocation
                     }
                     
                     New-Object -TypeName psobject -Property $props
-
                 }
             }
         }
@@ -331,26 +180,18 @@ function Get-AzStorageAccountNetworkACLs {
                     ValueFromPipeline = $true
                 )]
                 [string]
-                $date,
-                [Parameter(
-                    ValueFromPipeline = $true
-                )]
-                [string]
-                $workbookName
-
+                $date
             )
 
             process { 
-
-                $worksheet = $workbookName + "-" + $date + ".xlsx"
                 If ($env:HOME) {
                     Write-Verbose "Running on a non Windows computer.  Saving file to /users/%USERNAME%/Desktop"
-                    $path = "$env:HOME/Desktop/$worksheet"
+                    $path = "$env:HOME/Desktop/AzResources-$date.xlsx"
                     $desktopPath = "$env:HOME/Desktop"
                 }
                 elseif($env:HOMEPATH) {
                     Write-Verbose "Running a Windows PC. Saving file to C:\users\%USERNAME%\Desktop"
-                    $path = "$env:HOMEPATH\Desktop\$worksheet"
+                    $path = "$env:HOMEPATH\Desktop\AzResources-$date.xlsx"
                     $desktopPath = "$env:HOMEPATH\Desktop\"
                 }
 
@@ -362,10 +203,10 @@ function Get-AzStorageAccountNetworkACLs {
                     $folderPath = Get-Location | Select-Object -ExpandProperty Path
                     if($env:HOME){
                         Write-Verbose "Running on a non Windows computer."
-                        $path = $folderPath + "/$worksheet"
+                        $path = $folderPath + "/AzResources-$date.xlsx"
                     }else{
                         Write-Verbose "Running on a Windows computer."
-                        $path = $folderPath + "\$worksheet"
+                        $path = $folderPath + "\AzResources-$date.xlsx"
                     }
                 }
 
@@ -464,7 +305,7 @@ function Get-AzStorageAccountNetworkACLs {
                 
         #Validate necessary modules are installed
         Write-Verbose "Ensuring the proper PowerShell Modules are installed"
-        $installedModules = Confirm-ModulesInstalled -modules az.storage,  ImportExcel
+        $installedModules = Confirm-ModulesInstalled -modules az,  ImportExcel
         $modulesNeeded = $False
 
         foreach ($installedModule in $installedModules) {
@@ -489,8 +330,7 @@ function Get-AzStorageAccountNetworkACLs {
 
         # Defining all variables
         $date = (Get-Date).ToShortDateString().Replace("/", "-")
-        # $acls = @()
-        $acls = [System.Collections.ArrayList]::new()
+        $assignments = @()
         $selectedAzSubs = @()
 
         #Gathering and determine which subs to run against. 
@@ -516,16 +356,17 @@ function Get-AzStorageAccountNetworkACLs {
         foreach ($azSub in $selectedAzSubs) {
             $null = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | Select-Object -ExpandProperty name
             $azSubName = $azSub.subName
-            Write-Host "Getting Storage Accounts in sub: $azSubName" -ForegroundColor green
-            $stgAccts = Get-AzStorageAccount
-            foreach($stgAcct in $stgAccts){
-                $stgAcctACLs = Get-AzStorageAccountNetworkACLs -accountName $stgAcct.StorageAccountName -resourceGroupName $stgAcct.ResourceGroupName
-                # $acls += $stgAcctACLs
-                $acls.Add($stgAcctACLs) | Out-Null
-            }
+            Write-Host "Getting resources in sub: $azSubName" -ForegroundColor green
+            # $resourceGroups = Get-AzResourceGroup
+            # foreach($rg in $resourceGroups){
+            #     $subResources = Get-AzResourcesWithinRG -resourceGroupName $rg.ResourceGroupName
+            #     $resources += $subResources
+            # }
+            $subAssignments = Get-AzPolicyAssignment
+            $assignments += $subAssignments
         }
 
-        $excelPath = Get-DesktopPath -date $date -workbookName "AzStorageAccounts"
+        $excelPath = Get-DesktopPath -date $date
 
         ## Remove existing resource report
         If (Test-Path $excelPath) {
@@ -533,7 +374,7 @@ function Get-AzStorageAccountNetworkACLs {
         }
 
         #Outputing Excel File to current users desktop
-        $acls | Export-Excel -Path $excelPath -WorksheetName "StorageAccounts"
+        $assignments | Export-Excel -Path $excelPath -WorksheetName "AzurePolicyAssignments"
 
     }
 
