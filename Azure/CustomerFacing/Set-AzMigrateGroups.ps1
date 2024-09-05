@@ -111,22 +111,11 @@ function Set-AzMigrateGroup {
         $uri = "https://management.azure.com/subscriptions/$subscriptionID/resourceGroups/$resourceGroupName/providers/Microsoft.Migrate/assessmentProjects/$assessmentProject/groups/$groupName/updateMachines" + "?api-version=$apiVersion"
 
         try {
-          $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json"
+          Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" | out-null
         } catch {
           Write-Error $_
           break
         }
-
-        # $props = [ordered]@{
-        #   "assessmentProject" = $assessmentProject
-        #   "name" = $response.name
-        #   "eTag" = $response.eTag
-        #   "id" = $response.id
-        # }
-
-        # $obj = New-Object -TypeName PSObject -Property $props
-
-        # return $obj
       }
     }
 
@@ -174,22 +163,11 @@ function Set-AzMigrateGroup {
         $uri = "https://management.azure.com/subscriptions/$subscriptionID/resourceGroups/$resourceGroupName/providers/Microsoft.Migrate/assessmentProjects/$assessmentProject/groups/$groupName/updateMachines" + "?api-version=$apiVersion"
 
         try {
-          $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json"
+          Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body $body -ContentType "application/json" | Out-Null
         } catch {
           Write-Error $_
           break
         }
-
-        # $props = [ordered]@{
-        #   "assessmentProject" = $assessmentProject
-        #   "name" = $response.name
-        #   "eTag" = $response.eTag
-        #   "id" = $response.id
-        # }
-
-        # $obj = New-Object -TypeName PSObject -Property $props
-
-        # return $obj
       }
     }
 
