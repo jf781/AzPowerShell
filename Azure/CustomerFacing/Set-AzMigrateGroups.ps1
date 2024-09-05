@@ -495,7 +495,7 @@ function Set-AzMigrateGroup {
           Write-Host "VM $vm not found in discovered VMs. Please confirm the VM name in the list provided matches the discovered VM name in Azure Migrate"
           $vmError = [pscustomobject]@{
             "vmName"    = $vm
-            "operation" = "Add"
+            "operation" = "Remove"
             "error"     = "VM not found in discovered VMs. Please confirm the VM name in the list provided matches the discovered VM name in Azure Migrate"
           }
           $vmErrors.Add($vmError) | Out-Null
