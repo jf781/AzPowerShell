@@ -129,6 +129,7 @@ function Get-AzOrphanedResources {
 
             process {
                 $orphanedNSGs = Get-AzNetworkSecurityGroup | Where-Object { ($_.NetworkInterfaces.Count -eq 0) -and ($_.subnets.Count -eq 0) }
+                $subscription = (Get-Azcontext).Subscription.Name
                 
                 foreach ($orphanedNSG in $orphanedNSGs) {
                     $nsgNname = $orphanedNSG.Name
@@ -139,6 +140,7 @@ function Get-AzOrphanedResources {
                     #$nsgTags        = $orphanedNSG.TagsTable
 
                     $nsgProps = [ordered]@{
+                        Subscription    = $subscription
                         NSG_Name       = $nsgNname
                         Resource_Group = $nsgRgName
                         Location       = $nsgLocation
@@ -162,6 +164,7 @@ function Get-AzOrphanedResources {
             
             process {
                 $orphanedPIPs = Get-AzPublicIpAddress | Where-Object { $_.IpConfiguration -eq $null }
+                $subscription = (Get-Azcontext).Subscription.Name
 
                 foreach ($orphanedPIP in $orphanedPIPs) {
 
@@ -174,6 +177,7 @@ function Get-AzOrphanedResources {
                     #$pipTags                = $orphanedPIP.TagsTable
 
                     $pipProps = [ordered]@{
+                        Subscription      = $subscription
                         PublicIP_Name     = $pipName
                         Resource_Group    = $pipRgName
                         Location          = $pipLocation
@@ -197,6 +201,7 @@ function Get-AzOrphanedResources {
 
             process { 
                 $orphanicNICs = Get-AzNetworkInterface | Where-Object { ($_.PrivateEndpoint -eq $null) -and ($_.VirtualMachine -eq $null) }
+                $subscription = (Get-Azcontext).Subscription.Name
 
                 foreach ($orphanedNIC in $orphanicNICs) {
 
@@ -208,6 +213,7 @@ function Get-AzOrphanedResources {
                     #$nicTags            = $orphanedNIC.TagsTable
 
                     $nicProps = [ordered]@{
+                        Subscription    = $subscription
                         NIC_Name        = $nicName
                         Resource_Group  = $nicrgName
                         Location        = $nicLocation
@@ -230,6 +236,7 @@ function Get-AzOrphanedResources {
 
             process { 
                 $orphanedMngDisks = Get-AzDisk | Where-Object { ($_.ManagedBy -eq $null) -and ($_.DiskState -eq "Unattached") }
+                $subscription = (Get-Azcontext).Subscription.Name
 
                 foreach ($orphanedMngDisk in $orphanedMngDisks) {
                     
@@ -242,6 +249,7 @@ function Get-AzOrphanedResources {
                     #$diskTags = $orphanedMngDisk.TagsTable
 
                     $mngDiskProps = [ordered]@{
+                        Subscription   = $subscription
                         Disk_Name      = $diskName
                         Disk_Type      = "Managed" 
                         Resource_Group = $diskRgName
@@ -270,6 +278,7 @@ function Get-AzOrphanedResources {
             process {
 
                 $storageAccounts = Get-AzStorageAccount
+                $subscription = (Get-Azcontext).Subscription.Name
                 foreach ($storageAccount in $storageAccounts) {
                     $stgAcct = Get-AzStorageAccountKey -ResourceGroupName $storageAccount.ResourceGroupName -Name $storageAccount.StorageAccountName -ErrorAction SilentlyContinue
                     if ($stgAcct -ne $null) {
@@ -290,9 +299,10 @@ function Get-AzOrphanedResources {
                                         #$stgAcctTags = $storageAccount.Tags
 
                                         $unmngDiskProps = [ordered]@{
+                                            Subscription   = $subscription
+                                            Resource_Group = $unmngDiskRgName
                                             Disk_Name      = $unmngDiskName
                                             Disk_Type      = "Unmanaged"
-                                            Resource_Group = $unmngDiskRgName
                                             Location       = $unmngDiskLocation
                                             Disk_URI       = $unmngDiskUri
                                             Disk_Tier      = $unmngDiskSku
@@ -467,10 +477,10 @@ function Get-AzOrphanedResources {
 
         # Defining all variables
         $Date = (Get-Date).ToShortDateString().Replace("/", "-")
-        $orphanedNICs = @()
-        $orphanedPIPs = @()
-        $orphanedNSGs = @()
-        $orphanedMngDisks = @()
+        # $orphanedNICs = @()
+        # $orphanedPIPs = @()
+        # $orphanedNSGs = @()
+        # $orphanedMngDisks = @()
         $orphanedUnmngDisks = @()
         $selectedAzSubs = @()
 
@@ -495,19 +505,19 @@ function Get-AzOrphanedResources {
         
         ## Finding orphaned resources in each sub
         foreach ($azSub in $selectedAzSubs) {
-            $outNull = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | select -expand name
+            Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | select -expand name | out-null
             $azSubName = $azSub.subName
             Write-Host "Checking for orphaned resources in sub: $azSubName" -ForegroundColor green
-            $subOrphanedNICs = Get-AzOrphanedNICs
-            $subOrphanedPIPs = Get-AzOrphanedPublicIps
-            $subOrphanedNSGs = Get-AzOrphangedNetworkSecurityGroups
-            $subOrphanedMngDisks = Get-AzOrphanedManagedDisks
+            # $subOrphanedNICs = Get-AzOrphanedNICs
+            # $subOrphanedPIPs = Get-AzOrphanedPublicIps
+            # $subOrphanedNSGs = Get-AzOrphangedNetworkSecurityGroups
+            # $subOrphanedMngDisks = Get-AzOrphanedManagedDisks
             $subOrphanedUnmngDisks = Get-AzOrphanedUnmanagedDisks
 
-            $orphanedNICs += $subOrphanedNICs
-            $orphanedPIPs += $subOrphanedPIPs
-            $orphanedNSGs += $subOrphanedNSGs
-            $orphanedMngDisks += $subOrphanedMngDisks
+            # $orphanedNICs += $subOrphanedNICs
+            # $orphanedPIPs += $subOrphanedPIPs
+            # $orphanedNSGs += $subOrphanedNSGs
+            # $orphanedMngDisks += $subOrphanedMngDisks
             $orphanedUnMngDisks += $subOrphanedUnmngDisks
         }
 
@@ -519,10 +529,10 @@ function Get-AzOrphanedResources {
         }
 
         #Outputing Excel File to current users desktop
-        $orphanedPIPs | Export-Excel -Path $excelPath -WorksheetName "Public IPs"
-        $orphanedNSGs | Export-Excel -Path $excelPath -WorksheetName "NSGs"
-        $orphanedNICs | Export-Excel -Path $excelPath -WorksheetName "NICs"
-        $orphanedMngDisks | Export-Excel -Path $excelPath -WorksheetName "Managed Disks"
+        # $orphanedPIPs | Export-Excel -Path $excelPath -WorksheetName "Public IPs"
+        # $orphanedNSGs | Export-Excel -Path $excelPath -WorksheetName "NSGs"
+        # $orphanedNICs | Export-Excel -Path $excelPath -WorksheetName "NICs"
+        # $orphanedMngDisks | Export-Excel -Path $excelPath -WorksheetName "Managed Disks"
         $orphanedUnmngDisks | Export-Excel -Path $excelPath -WorksheetName "Unmanaged Disks"
 
     }

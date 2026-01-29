@@ -1,34 +1,31 @@
-function Get-AzNSGDetails {
+function Get-AzStorageAccountUsage {
     <#
     .SYNOPSIS
-        This script is designed to export a list of:
-        - NSGs
-        - Rules associated with each NSG
-        - Subnets and NICs associated with each NSG
+        TBD
 
     .DESCRIPTION
+        TBD
+
         This script does not install or make any changes.   It does have the following requirements that if not met, will stop the script from running
         - Running in PowerShell 5.1 or newer context
         - The following modules need to be installed
-            - Az.Network
+            - Az.Storage
             - ImportExcel
         
     .INPUTS
-        No input is needed to run the script.  If you are not connected to Azure it will prompt you to login.
+        No input is needed to run the script.  If you are not connected to Azure it will prompt you to login. 
 
     .OUTPUTS
-        It will output an Excel file on the current user's desktop that has a tab for the following Azure resources.  (Excel does not need to be installed on the workstation running the file)
-        - NSG rules
-        - NSG Associations
+        
 
     .NOTES
         Version:        1.0
         Author:         Joe Fecht - AHEAD, llc.
-        Creation Date:  Jan 2021
+        Creation Date:  September 2024
         Purpose/Change: Initial deployment
     
     .EXAMPLE
-        Get-AzNSGDetails
+        Get-AzStorageAccountUsage
     #>
     [CmdletBinding()]
     param (
@@ -121,157 +118,105 @@ function Get-AzNSGDetails {
         }
 
         #----------------------------------------------------------------------------------------
-        # Module to get NSG details from Subscription
+        # Module to get the storage account file share usage
         #----------------------------------------------------------------------------------------
+        
+        function Get-AzStorageAccountFileShareUsage {
+            [CmdLetBinding()]
+            param (
+                [Parameter(Mandatory = $true, ValueFromPipeline = $true )]
+                [string]
+                $accountName,
+                [Parameter(Mandatory = $true, ValueFromPipeline = $true)]
+                [string]
+                $resourceGroupName,
+                [Parameter(ValueFromPipeline = $true, Mandatory = $true)]
+                [string]
+                $accessToken,
+                [Parameter(ValueFromPipeline = $true, Mandatory = $false)]
+                [string]
+                $apiVersion = "2023-05-01"
+            )
+            process {
 
-        Function Get-AzNsgRules {
-          [CmdletBinding()]
-          param(
-          )
-          process{
-            $nsgs = Get-AzNetworkSecurityGroup
-            $subName = (Get-AzContext | Select-Object -ExpandProperty Name).Split('(')[0]
-
-            foreach($nsg in $nsgs){
-              $nsgRules = $nsg.SecurityRules
-              $nsgName = $nsg.Name
-              $nsgRg = $nsg.ResourceGroupName
-
-              if($nsgRules){
-                foreach($rule in $nsgRules){
-                  $ruleName                     = $rule.Name
-                  $ruleDirection                = $rule.Direction
-                  $rulePriority                 = $rule.Priority
-                  $ruleDescription              = $rule.Description
-                  $ruleProtocol                 = $rule.Protocol
-                  $ruleSourcePortRange          = $rule | Select-object @{Name="SourcePortRange";Expression={$_.SourcePortRange -join ","}} | Select-Object -ExpandProperty SourcePortRange
-                  $ruleDestinationPortRange     = $rule | Select-object @{Name="DestinationPortRange";Expression={$_.DestinationPortRange -join ","}} | Select-Object -ExpandProperty DestinationPortRange
-                  $ruleSourceAddressPrefix      = $rule | Select-object @{Name="SourceAddressPrefix";Expression={$_.SourceAddressPrefix -join ","}} | Select-Object -ExpandProperty SourceAddressPrefix
-                  $ruleDestinationAddressPrefix = $rule | Select-object @{Name="DestinationAddressPrefix";Expression={$_.DestinationAddressPrefix -join ","}} | Select-Object -ExpandProperty DestinationAddressPrefix
-                  $ruleSourceAsg                = $rule.SourceApplicationSecurityGroupsText
-                  $ruleDestinationAsg           = $rule.DestinationApplicationSecurityGroupsText
-
-                  $props = [ordered]@{
-                    Subscription                        = $subName
-                    ResourceGroup                       = $nsgRg
-                    NSG                                 = $nsgName
-                    RuleName                            = $ruleName
-                    Direction                           = $ruleDirection
-                    Priority                            = $rulePriority
-                    Description                         = $ruleDescription
-                    Protocol                            = $ruleProtocol
-                    SourcePortTange                     = $ruleSourcePortRange 
-                    DestinationPortRange                = $ruleDestinationPortRange
-                    SourceAddressPrefix                 = $ruleSourceAddressPrefix
-                    DestinationAddressPrefix            = $ruleDestinationAddressPrefix
-                    SourceApplicaitonSecurityGroup      = $ruleSourceAsg
-                    DestinationApplicationSecurityGroup = $ruleDestinationAsg
-                  }
-
-                  New-Object -TypeName psobject -Property $props
-                }
-              }else{
-                $props = [ordered]@{
-                  Subscription                        = $subName
-                  ResourceGroup                       = $nsgRg
-                  NSG                                 = $nsgName
-                  RuleName                            = "No custom rules defined"
-                  Direction                           = $Null
-                  Priority                            = $Null
-                  Description                         = $Null
-                  Protocol                            = $Null
-                  SourcePortTange                     = $Null
-                  DestinationPortRange                = $Null
-                  SourceAddressPrefix                 = $Null
-                  DestinationAddressPrefix            = $Null
-                  SourceApplicaitonSecurityGroup      = $Null
-                  DestinationApplicationSecurityGroup = $Null
+                $headers = @{
+                    Authorization = "Bearer $accessToken"
                 }
 
-                New-Object -TypeName psobject -Property $props
-              }
-            }
-          }
-        }
-
-        Function Get-AzNsgAssociations {
-          [CmdletBinding()]
-          param(
-          )
-          process{
-            $nsgs = Get-AzNetworkSecurityGroup
-            $subName = (Get-AzContext | Select-Object -ExpandProperty Name).Split('(')[0]
-
-            foreach($nsg in $nsgs){
-              $subnets = $nsg.Subnets
-              $nics = $nsg.NetworkInterfaces
-              $nsgName = $nsg.Name
-              $nsgRg = $nsg.ResourceGroupName
-
-              if($subnets){
-                foreach($subnet in $subnets){
-                  $subnetId = ($subnet.id).split("/")
-                  $subnetName = $subnetId[10]
-                  $vnetRg = $subnetId[4]
-                  $vnet = $subnetId[8]
-
-
+                try {
+                    $sa = Get-AzStorageAccount -StorageAccountName $accountName -ResourceGroupName $resourceGroupName
+                    Write-Verbose "Storage account found"
+                } catch {
+                    Write-Verbose "Storage account not found"
+                    return
+                }
                 
-                  $props = [ordered]@{
-                    Subscription          = $subName
-                    ResourceGroup         = $nsgRg
-                    NSG                   = $nsgName
-                    Subnet                = $subnetName
-                    VNet                  = $vnet
-                    VnetResourceGroup     = $vnetRg
-                    NIC                   = $null
-                    NICResouceGroup       = $null
-                  }
-
-                  New-Object -TypeName psobject -Property $props
-                }
-              }
-              
-              if($nics){
-                foreach($nic in $nics){
-                  $nicId = ($nic.Id).split("/")
-                  $nicRg = $nicId[4]
-                  $nicName = $nicId[8]
-
+                $listSharesUri = "https://management.azure.com/subscriptions/"+ (Get-AzContext).subscription.id +"/resourceGroups/"+ $sa.resourceGroupName + "/providers/Microsoft.Storage/storageAccounts/" + $sa.StorageAccountName + "/fileServices/default/shares?api-version=" + $apiVersion
                 
-                  $props = [ordered]@{
-                    Subscription          = $subName
-                    ResourceGroup         = $nsgRg
-                    NSG                   = $nsgName
-                    Subnet                = $null
-                    VNet                  = $null
-                    VnetResourceGroup     = $Null
-                    NIC                   = $nicName
-                    NICResouceGroup       = $nicRg
-                  }
-
-                  New-Object -TypeName psobject -Property $props
-                }
-              }
-
-              if((!$subnets) -and (!$nics)){
-                $props = [ordered]@{
-                  Subscription          = $subName
-                  ResourceGroup         = $nsgRg
-                  NSG                   = $nsgName
-                  Subnet                = "Not associated with a subnet"
-                  VNet                  = $null
-                  VnetResourceGroup     = $null
-                  NIC                   = "Not associated with a NIC"
-                  NICResouceGroup       = $null
+                try {
+                    $listSharesResponse = Invoke-RestMethod -Uri $listSharesUri -Headers $headers -Method Get
+                    Write-Verbose "File shared successfully retrieved"
+                } catch {
+                    Write-Host "Error getting file shares"
+                    Write-Host $_
+                    return
                 }
 
-                New-Object -TypeName psobject -Property $props
-              }
+                if ($listSharesResponse.value.count -eq 0) {
+                    Write-Host "No file shares found on storage account: $accountName" -ForegroundColor Yellow
+                    $props = [ordered]@{
+                        "Subscription"        = (Get-AzContext).Subscription.Name
+                        "StorageAccount"      = $sa.StorageAccountName
+                        "StorageAccountKind"  = $sa.Kind
+                        "FileShare"           = "n/a"
+                        "FileShareTier"       = "n/a"
+                        "ShareQuota"          = "n/a"
+                        "ShareUsage"          = "n/a"
+                        "ShareFreeSpace"      = "n/a"
+                        "ShareUsedPercentage" = "n/a"
+                    }
+                    
+                    New-Object -TypeName PSObject -Property $props
+                    
+                } else {
+                
+                    $fileShareNames = $listSharesResponse.value.name
+                
+                    foreach ($fileShareName in $fileShareNames) {
+
+                        $shareUri= "https://management.azure.com/subscriptions/"+ (Get-AzContext).subscription.id +"/resourceGroups/"+ $sa.resourceGroupName + "/providers/Microsoft.Storage/storageAccounts/" + $sa.StorageAccountName + "/fileServices/default/shares/" + $fileShareName + "?api-version=" + $apiVersion + "&`$expand=stats"
+                        
+                        try {
+                            $shareResponse = Invoke-RestMethod -Uri $shareUri -Headers $headers -Method Get
+                            Write-Verbose "File share: $fileShareName retrieved"
+                        } catch {
+                            Write-Host "Error getting file share: $fileShareName"
+                            Write-Host  $_
+                            return
+                        }
+                        
+                        $shareQuota = $shareResponse.properties.shareQuota
+                        $shareUsage = [math]::Round($shareResponse.properties.shareUsageBytes / 1GB, 2)  # Round to 2 decimal places
+                        $shareUsedPercent = [math]::Round(($shareUsage / $shareQuota) * 100, 2)  # Round to 2 decimal places
+                        $shareFree = [math]::Round($shareQuota - $shareUsage, 2)  # Round to 2 decimal places
+
+                        $props = [ordered]@{
+                            "Subscription"        = (Get-AzContext).Subscription.Name
+                            "StorageAccount"      = $sa.StorageAccountName
+                            "StorageAccountKind"  = $sa.Kind
+                            "FileShare"           = $fileShareName
+                            "FileShareTier"       = $shareResponse.properties.accessTier
+                            "ShareQuota"          = $shareQuota
+                            "ShareUsage"          = $shareUsage
+                            "ShareFreeSpace"      = $shareFree
+                            "ShareUsedPercentage" = $shareUsedPercent
+                        }
+                        
+                        New-Object -TypeName PSObject -Property $props
+                    }
+                }
             }
-          }
         }
-
         #----------------------------------------------------------------------------------------
         # Modules to determine path to save Excel file
         #----------------------------------------------------------------------------------------
@@ -282,18 +227,26 @@ function Get-AzNSGDetails {
                     ValueFromPipeline = $true
                 )]
                 [string]
-                $date
+                $date,
+                [Parameter(
+                    ValueFromPipeline = $true
+                )]
+                [string]
+                $workbookName
+
             )
 
             process { 
+
+                $worksheet = $workbookName + "-" + $date + ".xlsx"
                 If ($env:HOME) {
                     Write-Verbose "Running on a non Windows computer.  Saving file to /users/%USERNAME%/Desktop"
-                    $path = "$env:HOME/Desktop/AzResources-$date.xlsx"
+                    $path = "$env:HOME/Desktop/$worksheet"
                     $desktopPath = "$env:HOME/Desktop"
                 }
                 elseif($env:HOMEPATH) {
                     Write-Verbose "Running a Windows PC. Saving file to C:\users\%USERNAME%\Desktop"
-                    $path = "$env:HOMEPATH\Desktop\AzResources-$date.xlsx"
+                    $path = "$env:HOMEPATH\Desktop\$worksheet"
                     $desktopPath = "$env:HOMEPATH\Desktop\"
                 }
 
@@ -305,10 +258,10 @@ function Get-AzNSGDetails {
                     $folderPath = Get-Location | Select-Object -ExpandProperty Path
                     if($env:HOME){
                         Write-Verbose "Running on a non Windows computer."
-                        $path = $folderPath + "/AzResources-$date.xlsx"
+                        $path = $folderPath + "/$worksheet"
                     }else{
                         Write-Verbose "Running on a Windows computer."
-                        $path = $folderPath + "\AzResources-$date.xlsx"
+                        $path = $folderPath + "\$worksheet"
                     }
                 }
 
@@ -407,7 +360,7 @@ function Get-AzNSGDetails {
                 
         #Validate necessary modules are installed
         Write-Verbose "Ensuring the proper PowerShell Modules are installed"
-        $installedModules = Confirm-ModulesInstalled -modules az.network,  ImportExcel
+        $installedModules = Confirm-ModulesInstalled -modules az.storage,  ImportExcel
         $modulesNeeded = $False
 
         foreach ($installedModule in $installedModules) {
@@ -431,10 +384,13 @@ function Get-AzNSGDetails {
         }
 
         # Defining all variables
-        $Date = (Get-Date).ToShortDateString().Replace("/", "-")
-        $nsgRules = @()
-        $nsgAssociations = @()
+        $date = (Get-Date).ToShortDateString().Replace("/", "-")
+        $fileShareUsage = [System.Collections.ArrayList]::new()
+        $apiVersion = "2023-05-01"
         $selectedAzSubs = @()
+
+        # Get the access token
+        $accessToken = (Get-AzAccessToken).Token
 
         #Gathering and determine which subs to run against. 
         $azSubs = Get-AzSubsFromTenant 
@@ -455,20 +411,25 @@ function Get-AzNSGDetails {
             $selectedAzSubs += $sub
         }
                 
-        ## Finding NSGs in each sub
+        ## Gathering security score in each sub
         foreach ($azSub in $selectedAzSubs) {
-            Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | Select-Object -ExpandProperty name | out-Null
+            $null = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | Select-Object -ExpandProperty name
             $azSubName = $azSub.subName
-            Write-Host "Checking for Network Security Groups in sub: $azSubName" -ForegroundColor green
-            $subscriptionNsgRules = Get-AzNsgRules
-            $subscriptionNsgAssocations = Get-AzNsgAssociations
-
-            $nsgRules += $subscriptionNsgRules
-            $nsgAssociations += $subscriptionNsgAssocations
-
+            Write-Host "Getting Storage Accounts in sub: $azSubName" -ForegroundColor green
+            $stgAccts = Get-AzStorageAccount
+            foreach($stgAcct in $stgAccts){
+                if($stgAcct.Kind -eq "FileStorage"){
+                    Write-Verbose "Storage Account: $($stgAcct.StorageAccountName) is a File Storage Account"
+                    $stgAcctFileShareUsage = Get-AzStorageAccountFileShareUsage -accountName $stgAcct.StorageAccountName -resourceGroupName $stgAcct.ResourceGroupName -accessToken $accessToken -apiVersion $apiVersion
+                    # $acls += $stgAcctACLs
+                    $fileShareUsage.Add($stgAcctFileShareUsage) | Out-Null
+                }else{
+                    Write-Verbose "Storage Account: $($stgAcct.StorageAccountName) is not a File Storage Account"
+                }
+            }
         }
 
-        $excelPath = Get-DesktopPath -date $date
+        $excelPath = Get-DesktopPath -date $date -workbookName "AzStorageAccounts"
 
         ## Remove existing resource report
         If (Test-Path $excelPath) {
@@ -476,10 +437,8 @@ function Get-AzNSGDetails {
         }
 
         #Outputing Excel File to current users desktop
-        $nsgRules | Export-Excel -Path $excelPath -WorksheetName "NSG Rules"
-        $nsgAssociations | Export-Excel -Path $excelPath -WorksheetName "NSG Associations"
+        $fileShareUsage | Export-Excel -Path $excelPath -WorksheetName "StorageAccounts"
 
     }
-}
 
-Get-AzNSGDetails
+}

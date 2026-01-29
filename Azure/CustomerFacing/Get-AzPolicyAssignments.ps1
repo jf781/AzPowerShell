@@ -1,4 +1,4 @@
-function Get-AzResourceList {
+function Get-AzPolicyAssignments {
     <#
     .SYNOPSIS
         This script is will return a list of resources within one or more Azure subscriptions
@@ -23,7 +23,7 @@ function Get-AzResourceList {
         Purpose/Change: Initial deployment
     
     .EXAMPLE
-        Get-AzResourceList 
+        Get-AzPolicyAssignments
     #>
     [CmdletBinding()]
     param (
@@ -356,12 +356,7 @@ function Get-AzResourceList {
         foreach ($azSub in $selectedAzSubs) {
             $null = Set-AzContext -SubscriptionId $azSub.subId -TenantID $azsub.subTenantId | Select-Object -ExpandProperty name
             $azSubName = $azSub.subName
-            Write-Host "Getting resources in sub: $azSubName" -ForegroundColor green
-            # $resourceGroups = Get-AzResourceGroup
-            # foreach($rg in $resourceGroups){
-            #     $subResources = Get-AzResourcesWithinRG -resourceGroupName $rg.ResourceGroupName
-            #     $resources += $subResources
-            # }
+            Write-Host "Getting policies in sub: $azSubName" -ForegroundColor green
             $subAssignments = Get-AzPolicyAssignment
             $assignments += $subAssignments
         }
